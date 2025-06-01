@@ -1,13 +1,14 @@
+import time
+
 import jax
 import jax.numpy as jnp
-import matplotlib.pyplot as plt
-import matplotlib.animation as animation
-import time
-from tqdm import tqdm
 from PIL import Image
+from tqdm import tqdm
+
+from library.models import solve_darcy_fdm
 
 
-### setup
+### parameters
 
 # start timer
 T0 = time.time()
@@ -32,34 +33,12 @@ RR = 1e-3 # recharge rate is a positive contribution to the hydraulic head
 K_CROP_X = 3250
 K_CROP_Y = 1200
 
-# for plotting
+# plotting
 VIDEO_SAVE = False
-VIDEO_INTERVAL = 10
 VIDEO_SKIP_FRAMES = 0#9_000
 
 
 ### functions
-
-# type: (jnp.array, jnp.array, float, float, float, float, float) -> jnp.array
-@jax.jit
-def solve_darcy_fdm(h, k, dt, dx, dy, ss, rr):
-	""" Solve 2D Darcy Flow PDE for next state using explicit finite difference method
-	arg: h: jnp.array: 2D array representing current hydraulic head
-	arg: k: jnp.array: 2D array representing hydraulic conductivity
-	args: dt, dx, dy: float: Size of discretizations
-	arg: ss: float: Specific-storage coefficient
-	arg: rr: float: Recharge rate
-	returns: jnp.array: Next hydraulic head
-	"""
-	
-	# solve for next state
-	laplacian = (
-		(jnp.roll(h, -1, axis=0) + jnp.roll(h, 1, axis=0) - 2*h) / dx**2 +
-		(jnp.roll(h, -1, axis=1) + jnp.roll(h, 1, axis=1) - 2*h) / dy**2
-	)
-	next_state = h + dt / ss * (k * laplacian + rr)
-	
-	return next_state
 
 # type: (jnp.array) -> jnp.array
 @jax.jit
@@ -99,55 +78,6 @@ def simulate_hydraulic_head_fdm(h, k, n_steps, dt, dx, dy, ss, rr):
 	
 	return sim_h
 
-# type: (List[jnp.array], jnp.array, str) -> None
-def animate_hydrology(sim_h, k, skip_frames=VIDEO_SKIP_FRAMES, save_path=None):
-	
-	# init plot
-	fig, ax = plt.subplots(figsize=(8,8))
-	
-	# define frame function
-	# type: (int) -> List[matplotlib.artist.Artist]
-	def update(t):
-		
-		# skip frames
-		t += skip_frames
-		
-		# reset axis
-		ax.clear()
-		ax.set_xticks([],[])
-		ax.set_yticks([],[])
-		
-		# draw elements
-		
-		# # temp insert
-		# from matplotlib.patches import Rectangle
-		# ax.add_patch(Rectangle((1, 0), 64, 64,
-			# edgecolor='red',
-			# facecolor=None,
-			# fill=False,
-			# lw=1
-		# ))
-		
-		title = ax.set_title(f"t={t}")
-		hydraulic = ax.imshow(k)#, cmap='YlOrBr_r')
-		contour = ax.contour(sim_h[t], levels=10, cmap='Blues')
-		contour_labels = ax.clabel(contour, inline=True, fontsize=8)
-		
-		# return objects for blit
-		return [title, hydraulic, contour] + contour_labels
-	
-	# render animation
-	ani = animation.FuncAnimation(fig, update, frames=len(sim_h)-skip_frames, interval=VIDEO_INTERVAL, blit=False) # blit breaks title
-	
-	# output animation
-	plt.tight_layout()
-	if save_path is not None:
-		ani.save(save_path, writer='ffmpeg', fps=60, progress_callback=lambda i, n: print(f"\33[2K\r[Frame: {i}/{n} ({100*i/n:.2f}%)][Elapsed time: {time.time()-T0:.2f}s]", end=''))
-		print(f"Saved: \"{save_path}\"")
-		print(f"[Elapsed time: {time.time()-T0:.2f}s]")
-	else:
-		plt.show()
-
 
 ### main
 
@@ -164,4 +94,11 @@ print(f"Simulation completed.")
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 # animate simulation
-animate_hydrology(sim_h, k, save_path=__file__.replace('.py','.mp4') if VIDEO_SAVE else None)
+animate_hydrology(grid_x, grid_y, sim_h, 
+	k=k,
+	no_ticks=True,
+	skip_frames=VIDEO_SKIP_FRAMES,
+	save_path=__file__.replace('.py','.mp4') if VIDEO_SAVE else None
+)
+print("Closed plot")
+print(f"[Elapsed time: {time.time()-T0:.2f}s]")
