@@ -2,13 +2,15 @@ import time
 import datetime
 from collections import Counter
 
-import pandas as pd
 import numpy as np
-from scipy import interpolate
+import pandas as pd
 from PIL import Image
 from tqdm import tqdm
 
-from library.data import crop_matrix_crs
+from library.data import (
+	crop_matrix_crs,
+	interpolate_hydraulic_grid
+)
 from library.visualize import animate_hydrology
 
 
@@ -18,16 +20,21 @@ from library.visualize import animate_hydrology
 T0 = time.time()
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
-# hydraulic conductivity map
+# input paths
 K_PATH = 'data/SaturatedHydraulicConductivity_1km/KSat_Arithmetic_1km.tif'
+L_PATH = 'data/champaign_county_wells/OB_LOCATIONS.csv'
+M_PATH = 'data/champaign_county_wells/OB_WELL_MEASUREMENTS_Champaign_County.csv'
+
+# output paths
+M_CACHE = "data/processed/data_filtered_metric.csv"
+S_CACHE = "data/processed/data_surface.csv"
+I_CACHE = "data/processed/data_interpolated"
+
+# bounding CRS
 K_BOUND_N = 49.0000
 K_BOUND_S = 24.0000
 K_BOUND_W = -126.0000
 K_BOUND_E = -66.0000 # note: longitude=x latitude=y
-
-# plotting arguments
-VIDEO_SAVE = False
-VIDEO_FRAME_SKIP = 5000
 
 
 ### functions
@@ -35,10 +42,8 @@ VIDEO_FRAME_SKIP = 5000
 # type: (pd.DataFrame, pd.DataFrame) -> pd.DataFrame
 def filter_well_data(data_location, data_measure):
 	
-	# initialise dataframe
-	data_filtered = pd.DataFrame()
-	
 	# 1. Get ['P_Number', 'TIMESTAMP', 'DTW_FT_Reviewed'] columns from data_measure & establish dataframe lendth
+	data_filtered = pd.DataFrame()
 	data_filtered[['P_NUMBER', 'TIMESTAMP', 'DTW_FT_Reviewed']] = data_measure[['P_Number', 'TIMESTAMP', 'DTW_FT_Reviewed']]
 	
 	# 2. Map over 'P_NUMBER' to get ['LONG_NAD_83', 'LAT_NAD_83', 'LS_ELEV_FT'] columns for each measurement
@@ -58,28 +63,13 @@ def filter_well_data(data_location, data_measure):
 	
 	return data_filtered
 
-# type: (np.ndarray, np.ndarray, np.ndarray, np.ndarray) -> np.ndarray
-def interpolate_grid(values, coords, grid_x, grid_y):
-	
-	# 1. linear interpolation
-	# 2. determine NaN mask
-	# 3. nearest interpolation
-	# 4. combine lin interp over near interp by filling NaN values
-	grid_z_linear = interpolate.griddata(coords, values, (grid_x, grid_y), method='linear')
-	#grid_z_quadratic = interpolate.Rbf(grid_x, grid_y, grid_z_linear, function='multiquadric')
-	#RectBivariateSpline(..., kx=2, ky=2)
-	grid_z_nearest = interpolate.griddata(coords, values, (grid_x, grid_y), method='nearest')
-	grid_z = np.where(np.isnan(grid_z_linear), grid_z_nearest, grid_z_linear)
-	
-	return grid_z
-
 
 ### main
 
 # load data
 k = np.array(Image.open(K_PATH))
-data_location = pd.read_csv('data/champaign_county_wells/OB_LOCATIONS.csv')
-data_measure = pd.read_csv('data/champaign_county_wells/OB_WELL_MEASUREMENTS_Champaign_County.csv')
+data_location = pd.read_csv(L_PATH)
+data_measure = pd.read_csv(M_PATH)
 print(k.shape)
 print(data_location)
 print("Well#:", len(Counter(data_location['P_NUMBER'])))
@@ -87,10 +77,10 @@ print(data_measure)
 print("Well#:", len(Counter(data_measure['P_Number']))) ###! only 18 wells in measurement data
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
-# try/create cache
+# try|create data_filtered_metric, data_surface caches
 try:
-	data_filtered_metric = pd.read_csv('data/processed/data_filtered_metric.csv')
-	data_surface = pd.read_csv('data/processed/data_surface.csv', index_col='TIMESTAMP')
+	data_filtered_metric = pd.read_csv(M_CACHE)
+	data_surface = pd.read_csv(S_CACHE, index_col='TIMESTAMP')
 	data_surface.columns = data_surface.columns.astype('int32')
 	print("Found cache")
 	print(data_filtered_metric)
@@ -120,19 +110,19 @@ except FileNotFoundError as e:
 	
 	# output CSVs
 	outputs = [
-		(data_filtered_metric, "data/processed/data_filtered_metric.csv"),
-		(data_surface, "data/processed/data_surface.csv")
+		(data_filtered_metric, M_CACHE),
+		(data_surface, S_CACHE)
 	]
 	for df, path in outputs:
 		df.to_csv(path)
 		print(f"Saved \"{path}\" [Elapsed time: {time.time()-T0:.2f}s]")
 
 # determine well and bounding area coordinates
-data_coords = data_location.set_index('P_NUMBER').loc[data_surface.columns, ['LONG_NAD_83', 'LAT_NAD_83']].to_numpy()
-data_bound_n = data_coords[:,1].max()
-data_bound_s = data_coords[:,1].min()
-data_bound_w = data_coords[:,0].min()
-data_bound_e = data_coords[:,0].max()
+data_wells = data_location.set_index('P_NUMBER').loc[data_surface.columns, ['LONG_NAD_83', 'LAT_NAD_83']].to_numpy()
+data_bound_n = data_wells[:,1].max()
+data_bound_s = data_wells[:,1].min()
+data_bound_w = data_wells[:,0].min()
+data_bound_e = data_wells[:,0].max()
 print("Bounding area:")
 print("North:", data_bound_n)
 print("South:", data_bound_s)
@@ -144,111 +134,25 @@ print("East:", data_bound_e)
 # East: -87.981028
 
 # crop k and interpolate h
-k_cropped,_,(k_dx, k_dy) = crop_matrix_crs(k, (K_BOUND_N, K_BOUND_S, K_BOUND_W, K_BOUND_E), (data_bound_n, data_bound_s, data_bound_w, data_bound_e), verbose=True)
-grid_x, grid_y = np.meshgrid(
-	np.linspace(data_bound_w, data_bound_e, k_cropped.shape[1]),
-	np.linspace(data_bound_n, data_bound_s, k_cropped.shape[0])
-)
-h_time = np.array([interpolate_grid(row, data_coords, grid_x, grid_y) for row in tqdm(data_surface.to_numpy(), desc="Grid interpolation")]) ###! truncated
-print(data_coords.shape)
-print(k_cropped.shape)
+k_crop, k_crop_idx = crop_matrix_crs(k, (K_BOUND_N, K_BOUND_S, K_BOUND_W, K_BOUND_E), (data_bound_n, data_bound_s, data_bound_w, data_bound_e))
+grid_x, grid_y = np.meshgrid(np.linspace(data_bound_w, data_bound_e, k_crop.shape[1]), np.linspace(data_bound_n, data_bound_s, k_crop.shape[0]))
+h_time = np.array([interpolate_hydraulic_grid(row, data_wells, grid_x, grid_y) for row in tqdm(data_surface.to_numpy(), desc="Grid interpolation")])
+print(data_wells.shape)
+print(k_crop.shape)
 print(h_time.shape)
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 # (18, 2)
 # (43, 48)
 # (5442, 43, 48)
 
-# save interpolated surface data
-h_time_save_path = "data/processed/champaign_county_wells_interpolated_surface"
-np.savez(h_time_save_path, grid_x=grid_x, grid_y=grid_y, h_time=h_time)
-print(f"Saved \"{h_time_save_path}.npz\"")
-print(f"[Elapsed time: {time.time()-T0:.2f}s]")
-
-
-grid_extent = (data_bound_w, data_bound_e, data_bound_s, data_bound_n)
-
-###! debug plots
-import matplotlib.pyplot as plt
-plt.imshow(grid_x)
-plt.title("grid_x")
-plt.show() # grid_x increases left->right
-plt.imshow(grid_y)
-plt.title("grid_y")
-plt.show() # grid_y increases lower->upper, k increases lower->upper
-fig, axis = plt.subplots(figsize=(10,7), nrows=2, ncols=2)
-row0, row1 = axis
-(ax01, ax02) = row0
-(ax11, ax12) = row1
-im01 = ax01.imshow(k_cropped, aspect='equal', cmap='viridis', extent=grid_extent)
-im02 = ax02.imshow(h_time[-1], aspect='equal', cmap='Blues', extent=grid_extent)
-im11 = ax11.imshow(k_cropped, aspect='equal', cmap='viridis')
-im12 = ax12.imshow(h_time[-1], aspect='equal', cmap='Blues')
-for ax in row0:
-	ax.scatter(data_coords[:,0], data_coords[:,1], c='red', s=16, marker='x')
-	for x, y in zip(data_coords[:,0], data_coords[:,1]):
-		ax.text(x, y-0.01, f'({x:.2f}, {y:.2f})', color='red', fontsize=8, ha='center')
-fig.colorbar(im01)
-fig.colorbar(im02)
-fig.tight_layout()
-plt.show()
-
-# plot interpolated grids
-animate_hydrology(
-	h_time,
-	k=k_cropped,
-	grid_extent=grid_extent,
-	scatter_data=data_coords.T,
-	scatter_labels=True,
-	xlabel="Longitude",
-	ylabel="Latitude",
-	axis_ticks=True,
-	cbar=True,
-	cbar_label="cm/hr",
-	frame_skip=VIDEO_FRAME_SKIP,
-	save_path=__file__.replace('.py','.mp4') if VIDEO_SAVE else None
+# create cache
+np.savez(I_CACHE,
+	data_wells=data_wells,
+	k_crop=k_crop,
+	k_crop_idx=k_crop_idx,
+	grid_x=grid_x,
+	grid_y=grid_y,
+	h_time=h_time
 )
-print("Closed plot")
+print(f"Saved \"{I_CACHE}.npz\"")
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")
-
-
-### initial time-series conversion
-### creates sparse structure with surfaces for each long-format measurement
-
-# surface = {}
-# time_surface = []
-# for i, row in data_filtered_metric.iterrows():
-	# surface[row['P_NUMBER']] = (row['LONG_NAD_83'], row['LAT_NAD_83'], row['HYDRAULIC_HEAD_M'])
-	# time_surface.append(surface)
-	# print(i, len(surface.keys()))
-
-#data_surface = pd.DataFrame([{row['P_NUMBER']:row['HYDRAULIC_HEAD_M']} for _,row in data_filtered_metric.iterrows()])
-#data_surface.columns = data_surface.columns.astype(int)
-#data_surface = data_surface.ffill()
-#data_surface['TIMESTAMP'] = data_filtered_metric['TIMESTAMP']
-
-###
-
-#grid_extent = (data_bound_w, data_bound_w+k_cropped.shape[1]*k_dx, data_bound_s, data_bound_s+k_cropped.shape[0]*k_dy) # true grid extent
-
-###! scale scatter data (curvature scaling)
-# >>> import numpy as np
-# >>> x = np.array([1.0,2.0,3.0,4.0,5.0])
-# >>> x
-# array([1., 2., 3., 4., 5.])
-# >>> xu = x-x.mean()
-# >>> xu
-# array([-2., -1.,  0.,  1.,  2.])
-# >>> xus = xu*2
-# >>> xus
-# array([-4., -2.,  0.,  2.,  4.])
-# >>> xh = xus+x.mean()
-# >>> xh
-# array([-1.,  1.,  3.,  5.,  7.])
-# >>> 
-# x = data_coords[:,1]
-# xu = x.mean(axis=0)
-# xc = x-xu
-# xcs = xc * (k_cropped.shape[0]*k_dx / (data_bound_n-data_bound_s))
-# xh = xcs+xu
-# data_coords[:,1] = xh
-#grid_extent = (data_coords[:,0].min(), data_coords[:,0].max(), data_coords[:,1].min(), data_coords[:,1].max()) # scatter extent (for curvature scaling)

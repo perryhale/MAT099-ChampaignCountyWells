@@ -84,20 +84,20 @@ def simulate_hydraulic_head_fdm(h, k, n_steps, dt, dx, dy, ss, rr):
 
 # (load/crop/clip) hydraulic conductivity data
 k = jnp.array(Image.open(K_PATH))
-k_cropped = k[K_CROP_Y:K_CROP_Y+RES_Y, K_CROP_X:K_CROP_X+RES_X]
-k_cropped = jnp.minimum(jnp.maximum(k_cropped, 0), 10)
+k_crop = k[K_CROP_Y:K_CROP_Y+RES_Y, K_CROP_X:K_CROP_X+RES_X]
+k_crop = jnp.minimum(jnp.maximum(k_crop, 0), 10)
 
 # run fdm simulation
 init_h = jnp.ones((RES_X, RES_Y))
 #init_h = jnp.array([[jnp.sin(x) for x in jnp.linspace(0,1,RES_X)] for y in jnp.linspace(0,1,RES_Y)])
-sim_h = simulate_hydraulic_head_fdm(init_h, k_cropped, N_STEPS, DT, DX, DY, SS, RR)
+sim_h = simulate_hydraulic_head_fdm(init_h, k_crop, N_STEPS, DT, DX, DY, SS, RR)
 print(f"Simulation completed.")
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 # animate simulation
 animate_hydrology(
 	sim_h,
-	k=k_cropped,
+	k=k_crop,
 	axis_ticks=True,
 	frame_skip=VIDEO_FRAME_SKIP,
 	save_path=__file__.replace('.py','.mp4') if VIDEO_SAVE else None

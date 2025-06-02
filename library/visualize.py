@@ -5,7 +5,7 @@ import matplotlib.animation as animation
 def animate_hydrology(
 		h_time, # np.ndarray
 		k=None, # np.ndarray
-		grid_extent=None, # Tuple[float, float, float, float]|None # (left, right, bottom, top)
+		grid_extent=None, # Tuple[float, float, float, float]|None #"(left, right, bottom, top)"
 		scatter_data=None, # np.ndarray|None
 		scatter_labels=False, # bool
 		xlabel=None, # str|None
@@ -79,13 +79,11 @@ def animate_hydrology(
 	return None
 
 
-###
-
+###! debug and styling
 # colors='white', linestyles='dashed')
 # cmap_trunc = lambda cmap,low,high,levels: plt.cm.colors.LinearSegmentedColormap.from_list('', cmap(np.linspace(low, high, levels)))
 # trunc_blues = cmap_trunc(plt.cm.Blues, 0.0, 0.5, contour_levels)
 # trunc_reds = cmap_trunc(plt.cm.Reds, 0.5, 1.0, contour_levels)
 # k_extent = [grid_x[0,0] - (grid_x[0,1] - grid_x[0,0])/2, grid_x[0,-1] + (grid_x[0,1] - grid_x[0,0])/2, grid_y[0,0] - (grid_y[1,0] - grid_y[0,0])/2, grid_y[-1,0] + (grid_y[1,0] - grid_y[0,0])/2]
-
 # fig, ax = plt.subplots(figsize=(8,8)) if frame_square else plt.subplots(figsize=(8,8*(grid_y.max() - grid_y.min()) / (grid_x.max() - grid_x.min())))
 # ax.set_aspect('equal') ###! patch
