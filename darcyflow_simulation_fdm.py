@@ -21,14 +21,14 @@ RES_X = 64
 RES_Y = RES_X
 
 # physical resolution
-DX = 1 # cm
+DX = 100_000 # cm
 DY = DX # cm
-DT = 1e-3 # hr
+DT = 24 # hr
 
 # ground properties
 K_PATH = 'data/SaturatedHydraulicConductivity_1km/KSat_Arithmetic_1km.tif' # hydraulic conductivity is a measure of flow distance over time. (data in centimeters per hour)
-SS = 1e-1 # specific storage is a dimensionless quantity representing the volume of water released from storage per unit decline in hydraulic head
-RR = 1e-3 # recharge rate is a positive contribution to the hydraulic head
+SS = -14e-2 # specific storage is a quantity representing the volume of water released from storage per unit decline in hydraulic head. SI unit: inverse length
+RR = 1e-8 # recharge rate is a positive contribution to the hydraulic head
 
 # raster coordinates for upper left corner of cropped region from hydraulic conductivity data
 K_CROP_X = 3250
@@ -58,7 +58,7 @@ def apply_boundary_conditions(h):
 	return hhat
 
 # type: (jnp.array, jnp.array, int, float, float, float, float, float) -> List[jnp.array]
-def simulate_hydraulic_head_fdm(h, k, n_steps, dt, dx, dy, ss, rr):
+def simulate_hydraulic_surface_fdm(h, k, n_steps, dt, dx, dy, ss, rr):
 	
 	# assertions
 	assert h.shape == k.shape, f"ASSERT: Arrays h and k must have same shape: h.shape={h.shape}, k.shape={k.shape}."
@@ -88,9 +88,9 @@ k_crop = k[K_CROP_Y:K_CROP_Y+RES_Y, K_CROP_X:K_CROP_X+RES_X]
 k_crop = jnp.minimum(jnp.maximum(k_crop, 0), 10)
 
 # run fdm simulation
-init_h = jnp.ones((RES_X, RES_Y))
-#init_h = jnp.array([[jnp.sin(x) for x in jnp.linspace(0,1,RES_X)] for y in jnp.linspace(0,1,RES_Y)])
-sim_h = simulate_hydraulic_head_fdm(init_h, k_crop, N_STEPS, DT, DX, DY, SS, RR)
+#init_h = jnp.ones((RES_X, RES_Y))
+init_h = jnp.array([[jnp.sin(jnp.pi*x)*jnp.sin(jnp.pi*y) for x in jnp.linspace(0,1,RES_X)] for y in jnp.linspace(0,1,RES_Y)])
+sim_h = simulate_hydraulic_surface_fdm(init_h, k_crop, N_STEPS, DT, DX, DY, SS, RR)
 print(f"Simulation completed.")
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
