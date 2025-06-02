@@ -6,8 +6,9 @@ import pandas as pd
 import numpy as np
 from scipy import interpolate
 from PIL import Image
+from tqdm import tqdm
 
-from library.data import crop_matrix_nad83
+from library.data import crop_matrix_crs
 from library.visualize import animate_hydrology
 
 
@@ -26,7 +27,7 @@ K_BOUND_E = -66.0000 # note: longitude=x latitude=y
 
 # plotting arguments
 VIDEO_SAVE = False
-VIDEO_SKIP_FRAMES = 5000
+VIDEO_FRAME_SKIP = 5000
 
 
 ### functions
@@ -65,6 +66,8 @@ def interpolate_grid(values, coords, grid_x, grid_y):
 	# 3. nearest interpolation
 	# 4. combine lin interp over near interp by filling NaN values
 	grid_z_linear = interpolate.griddata(coords, values, (grid_x, grid_y), method='linear')
+	#grid_z_quadratic = interpolate.Rbf(grid_x, grid_y, grid_z_linear, function='multiquadric')
+	#RectBivariateSpline(..., kx=2, ky=2)
 	grid_z_nearest = interpolate.griddata(coords, values, (grid_x, grid_y), method='nearest')
 	grid_z = np.where(np.isnan(grid_z_linear), grid_z_nearest, grid_z_linear)
 	
@@ -135,18 +138,18 @@ print("North:", data_bound_n)
 print("South:", data_bound_s)
 print("West:", data_bound_w)
 print("East:", data_bound_e)
-# North: -87.981028
-# South: -88.463237
-# West: 40.05338
-# East: 40.385156
+# North: 40.385156
+# South: 40.05338
+# West: -88.463237
+# East: -87.981028
 
 # crop k and interpolate h
-k_cropped,_,(k_dx, k_dy) = crop_matrix_nad83(k, (K_BOUND_N, K_BOUND_S, K_BOUND_W, K_BOUND_E), (data_bound_n, data_bound_s, data_bound_w, data_bound_e), verbose=True)
+k_cropped,_,(k_dx, k_dy) = crop_matrix_crs(k, (K_BOUND_N, K_BOUND_S, K_BOUND_W, K_BOUND_E), (data_bound_n, data_bound_s, data_bound_w, data_bound_e), verbose=True)
 grid_x, grid_y = np.meshgrid(
 	np.linspace(data_bound_w, data_bound_e, k_cropped.shape[1]),
-	np.linspace(data_bound_s, data_bound_n, k_cropped.shape[0])
+	np.linspace(data_bound_n, data_bound_s, k_cropped.shape[0])
 )
-h_time = np.array([interpolate_grid(row, data_coords, grid_x, grid_y) for row in data_surface.to_numpy()])
+h_time = np.array([interpolate_grid(row, data_coords, grid_x, grid_y) for row in tqdm(data_surface.to_numpy(), desc="Grid interpolation")]) ###! truncated
 print(data_coords.shape)
 print(k_cropped.shape)
 print(h_time.shape)
@@ -161,15 +164,47 @@ np.savez(h_time_save_path, grid_x=grid_x, grid_y=grid_y, h_time=h_time)
 print(f"Saved \"{h_time_save_path}.npz\"")
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
-# plot interoplated grids
-animate_hydrology(grid_x, grid_y, h_time, 
+
+grid_extent = (data_bound_w, data_bound_e, data_bound_s, data_bound_n)
+
+###! debug plots
+import matplotlib.pyplot as plt
+plt.imshow(grid_x)
+plt.title("grid_x")
+plt.show() # grid_x increases left->right
+plt.imshow(grid_y)
+plt.title("grid_y")
+plt.show() # grid_y increases lower->upper, k increases lower->upper
+fig, axis = plt.subplots(figsize=(10,7), nrows=2, ncols=2)
+row0, row1 = axis
+(ax01, ax02) = row0
+(ax11, ax12) = row1
+im01 = ax01.imshow(k_cropped, aspect='equal', cmap='viridis', extent=grid_extent)
+im02 = ax02.imshow(h_time[-1], aspect='equal', cmap='Blues', extent=grid_extent)
+im11 = ax11.imshow(k_cropped, aspect='equal', cmap='viridis')
+im12 = ax12.imshow(h_time[-1], aspect='equal', cmap='Blues')
+for ax in row0:
+	ax.scatter(data_coords[:,0], data_coords[:,1], c='red', s=16, marker='x')
+	for x, y in zip(data_coords[:,0], data_coords[:,1]):
+		ax.text(x, y-0.01, f'({x:.2f}, {y:.2f})', color='red', fontsize=8, ha='center')
+fig.colorbar(im01)
+fig.colorbar(im02)
+fig.tight_layout()
+plt.show()
+
+# plot interpolated grids
+animate_hydrology(
+	h_time,
 	k=k_cropped,
-	#k_extent=(data_bound_w, data_bound_w+k_cropped.shape[1]*k_dx, data_bound_s, data_bound_s+k_cropped.shape[0]*k_dy),
+	grid_extent=grid_extent,
 	scatter_data=data_coords.T,
+	scatter_labels=True,
 	xlabel="Longitude",
 	ylabel="Latitude",
+	axis_ticks=True,
+	cbar=True,
 	cbar_label="cm/hr",
-	skip_frames=VIDEO_SKIP_FRAMES,
+	frame_skip=VIDEO_FRAME_SKIP,
 	save_path=__file__.replace('.py','.mp4') if VIDEO_SAVE else None
 )
 print("Closed plot")
@@ -190,3 +225,30 @@ print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 #data_surface.columns = data_surface.columns.astype(int)
 #data_surface = data_surface.ffill()
 #data_surface['TIMESTAMP'] = data_filtered_metric['TIMESTAMP']
+
+###
+
+#grid_extent = (data_bound_w, data_bound_w+k_cropped.shape[1]*k_dx, data_bound_s, data_bound_s+k_cropped.shape[0]*k_dy) # true grid extent
+
+###! scale scatter data (curvature scaling)
+# >>> import numpy as np
+# >>> x = np.array([1.0,2.0,3.0,4.0,5.0])
+# >>> x
+# array([1., 2., 3., 4., 5.])
+# >>> xu = x-x.mean()
+# >>> xu
+# array([-2., -1.,  0.,  1.,  2.])
+# >>> xus = xu*2
+# >>> xus
+# array([-4., -2.,  0.,  2.,  4.])
+# >>> xh = xus+x.mean()
+# >>> xh
+# array([-1.,  1.,  3.,  5.,  7.])
+# >>> 
+# x = data_coords[:,1]
+# xu = x.mean(axis=0)
+# xc = x-xu
+# xcs = xc * (k_cropped.shape[0]*k_dx / (data_bound_n-data_bound_s))
+# xh = xcs+xu
+# data_coords[:,1] = xh
+#grid_extent = (data_coords[:,0].min(), data_coords[:,0].max(), data_coords[:,1].min(), data_coords[:,1].max()) # scatter extent (for curvature scaling)

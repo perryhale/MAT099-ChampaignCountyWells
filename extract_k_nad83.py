@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 from PIL import Image
 
-from library.data import crop_matrix_nad83
+from library.data import crop_matrix_crs
 
 
 ### parameters
@@ -45,11 +45,12 @@ print("East:", data_bound_e)
 # East: 40.385156
 
 # crop k and unpack
-k_cropped, target_idx, _ = crop_matrix_nad83(k, (K_BOUND_N, K_BOUND_S, K_BOUND_W, K_BOUND_E), (data_bound_n, data_bound_s, data_bound_w, data_bound_e))
+k_cropped, target_idx, _ = crop_matrix_crs(k, (K_BOUND_N, K_BOUND_S, K_BOUND_W, K_BOUND_E), (data_bound_n, data_bound_s, data_bound_w, data_bound_e))
 target_north_idx, target_south_idx, target_west_idx, target_east_idx = target_idx
 
 # interactive plot
 plt.imshow(k, vmin=0, vmax=25)
+plt.colorbar()
 plt.scatter([target_west_idx, target_east_idx], [target_north_idx, target_south_idx], c='red', marker='+')
 plt.gca().add_patch(Rectangle((target_west_idx, target_north_idx), k_cropped.shape[1], k_cropped.shape[0],
 	edgecolor='red',
@@ -57,6 +58,5 @@ plt.gca().add_patch(Rectangle((target_west_idx, target_north_idx), k_cropped.sha
 	fill=False,
 	lw=1
 ))
-plt.colorbar()
 plt.tight_layout()
 plt.show()

@@ -1,8 +1,10 @@
 import math
 import numpy as np
 
-# type: (np.ndarray, Tuple[float, float, float, float], Tuple[float, float, float, float]) -> np.ndarray
-def crop_matrix_nad83(matrix, coord_bound, coord_target, verbose=False):
+# type: (np.ndarray, Tuple[float, float, float, float], Tuple[float, float, float, float], bool) -> np.ndarray
+def crop_matrix_crs(matrix, coord_bound, coord_target, verbose=False):
+	
+	###! Does not handle curvature, results in incorrect projection
 	
 	# assertions
 	assert len(matrix.shape) >= 2, f"Argument matrix must have at least two axis, got {len(matrix.shape)} axis."
@@ -54,8 +56,8 @@ def crop_matrix_nad83(matrix, coord_bound, coord_target, verbose=False):
 	crop_h = target_south_idx-target_north_idx
 	if verbose:
 		print("crop_matrix_nad83: Crop coordinates")
-		print(crop_x, crop_y)
-		print(crop_w, crop_h)
+		print(f"({crop_y},{crop_x})")
+		print(f"({crop_h},{crop_w})")
 	
 	# slice matrix
 	mat_cropped = matrix[crop_y:crop_y+crop_h, crop_x:crop_x+crop_w]
