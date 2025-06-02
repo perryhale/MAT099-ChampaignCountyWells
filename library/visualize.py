@@ -2,9 +2,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 
-# type: (np.ndarray, np.ndarray, np.ndarray, np.ndarray|None, np.ndarray|None, str|None, str|None, str|None, bool, int, int, int, int, str|None) -> None
+# type: (np.ndarray, np.ndarray, np.ndarray, np.ndarray|None, 
+#	Tuple[float, float, float, float],
+#	np.ndarray|None, str|None, str|None, str|None, bool, int, int, int, int, str|None) -> None
 def animate_hydrology(grid_x, grid_y, h_time,
 		k=None,
+		k_extent=None,
 		scatter_data=None,
 		xlabel=None,
 		ylabel=None,
@@ -34,6 +37,16 @@ def animate_hydrology(grid_x, grid_y, h_time,
 	if k is not None:
 		k_cb = fig.colorbar(ax.imshow(k), label=cbar_label, fraction=0.03, pad=0.03)
 	
+	if k_extent is None:
+		# dx = grid_x[0,1] - grid_x[0,0]
+		# dy = grid_y[1,0] - grid_y[0,0]
+		# x0 = grid_x[0,0] - (grid_x[0,1] - grid_x[0,0])/2
+		# x1 = grid_x[0,-1] + (grid_x[0,1] - grid_x[0,0])/2
+		# y0 = grid_y[0,0] - (grid_y[1,0] - grid_y[0,0])/2
+		# y1 = grid_y[-1,0] + (grid_y[1,0] - grid_y[0,0])/2
+		# k_extent = [x0, x1, y0, y1]
+		k_extent = (grid_x.min(), grid_x.max(), grid_y.min(), grid_y.max())
+	
 	# define frame function
 	# type: (int) -> None ###! List[matplotlib.artist.Artist]
 	def update(t):
@@ -43,7 +56,7 @@ def animate_hydrology(grid_x, grid_y, h_time,
 		
 		# reset axis
 		ax.clear()
-		ax.set_aspect('equal')
+		#ax.set_aspect('equal')
 		ax.set_title(f"t={t}")
 		
 		# draw surface
@@ -53,7 +66,7 @@ def animate_hydrology(grid_x, grid_y, h_time,
 		
 		# draw optionals
 		if k is not None:
-			k_im = ax.imshow(k, extent=(grid_x.min(), grid_x.max(), grid_y.min(), grid_y.max()), aspect='equal', cmap=k_cmap)
+			k_im = ax.imshow(k, extent=k_extent, cmap=k_cmap)
 		if scatter_data is not None:
 			ax.scatter(scatter_x, scatter_y, c='red', s=16, marker='x')
 		if xlabel is not None:

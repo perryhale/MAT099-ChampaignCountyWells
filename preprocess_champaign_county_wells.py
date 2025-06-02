@@ -141,7 +141,7 @@ print("East:", data_bound_e)
 # East: 40.385156
 
 # crop k and interpolate h
-k_cropped,_ = crop_matrix_nad83(k, (K_BOUND_N, K_BOUND_S, K_BOUND_W, K_BOUND_E), (data_bound_n, data_bound_s, data_bound_w, data_bound_e))
+k_cropped,_,(k_dx, k_dy) = crop_matrix_nad83(k, (K_BOUND_N, K_BOUND_S, K_BOUND_W, K_BOUND_E), (data_bound_n, data_bound_s, data_bound_w, data_bound_e), verbose=True)
 grid_x, grid_y = np.meshgrid(
 	np.linspace(data_bound_w, data_bound_e, k_cropped.shape[1]),
 	np.linspace(data_bound_s, data_bound_n, k_cropped.shape[0])
@@ -164,6 +164,7 @@ print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 # plot interoplated grids
 animate_hydrology(grid_x, grid_y, h_time, 
 	k=k_cropped,
+	#k_extent=(data_bound_w, data_bound_w+k_cropped.shape[1]*k_dx, data_bound_s, data_bound_s+k_cropped.shape[0]*k_dy),
 	scatter_data=data_coords.T,
 	xlabel="Longitude",
 	ylabel="Latitude",

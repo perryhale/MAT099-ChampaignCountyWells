@@ -44,8 +44,8 @@ print("East:", data_bound_e)
 # West: 40.05338
 # East: 40.385156
 
-# crop k/unpack
-k_cropped, target_idx = crop_matrix_nad83(k, (K_BOUND_N, K_BOUND_S, K_BOUND_W, K_BOUND_E), (data_bound_n, data_bound_s, data_bound_w, data_bound_e))
+# crop k and unpack
+k_cropped, target_idx, _ = crop_matrix_nad83(k, (K_BOUND_N, K_BOUND_S, K_BOUND_W, K_BOUND_E), (data_bound_n, data_bound_s, data_bound_w, data_bound_e))
 target_north_idx, target_south_idx, target_west_idx, target_east_idx = target_idx
 
 # interactive plot
