@@ -1,4 +1,6 @@
 import math
+import jax
+import jax.numpy as jnp
 import numpy as np
 from scipy import interpolate
 
@@ -84,3 +86,20 @@ def interpolate_hydraulic_grid(values, coords, grid_x, grid_y):
 	#RectBivariateSpline(, kx=2, ky=2)
 	
 	return grid_z
+
+
+# type: (np.ndarray, np.ndarray, int, bool) ~> Tuple[np.ndarray, np.ndarray]
+def batch_generator(data_x, data_y, batch_size, shuffle_key=None):
+	
+	# assertions
+	assert (len(data_x)==len(data_y))
+	
+	# yield infinite batches optionally shuffled
+	while True:
+		n_samples = len(data_x)
+		data_idx = jax.random.permutation(shuffle_key, n_samples) if (shuffle_key is not None) else range(n_samples)
+		for batch_data_idx in range(0, n_samples, batch_size):
+			batch_idx = data_idx[batch_data_idx:batch_data_idx+batch_size]
+			batch_x = data_x[batch_idx]
+			batch_y = data_y[batch_idx]
+			yield batch_x, batch_y

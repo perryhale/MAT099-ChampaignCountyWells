@@ -42,7 +42,7 @@ K_BOUND_E = -66.0000 # note: longitude=x latitude=y
 # type: (pd.DataFrame, pd.DataFrame) -> pd.DataFrame
 def filter_well_data(data_location, data_measure):
 	
-	# 1. Get ['P_Number', 'TIMESTAMP', 'DTW_FT_Reviewed'] columns from data_measure & establish dataframe lendth
+	# 1. Get ['P_Number', 'TIMESTAMP', 'DTW_FT_Reviewed'] columns from data_measure & establish dataframe length
 	data_filtered = pd.DataFrame()
 	data_filtered[['P_NUMBER', 'TIMESTAMP', 'DTW_FT_Reviewed']] = data_measure[['P_Number', 'TIMESTAMP', 'DTW_FT_Reviewed']]
 	
@@ -135,7 +135,10 @@ print("East:", data_bound_e)
 
 # crop k and interpolate h
 k_crop, k_crop_idx = crop_matrix_crs(k, (K_BOUND_N, K_BOUND_S, K_BOUND_W, K_BOUND_E), (data_bound_n, data_bound_s, data_bound_w, data_bound_e))
-grid_x, grid_y = np.meshgrid(np.linspace(data_bound_w, data_bound_e, k_crop.shape[1]), np.linspace(data_bound_n, data_bound_s, k_crop.shape[0]))
+grid_x, grid_y = np.meshgrid(
+	np.linspace(data_bound_w, data_bound_e, k_crop.shape[1]),
+	np.linspace(data_bound_n, data_bound_s, k_crop.shape[0])
+)
 h_time = np.array([interpolate_hydraulic_grid(row, data_wells, grid_x, grid_y) for row in tqdm(data_surface.to_numpy(), desc="Grid interpolation")])
 print(data_wells.shape)
 print(k_crop.shape)

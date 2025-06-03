@@ -5,7 +5,7 @@ import jax.numpy as jnp
 from PIL import Image
 from tqdm import tqdm
 
-from library.models import solve_darcy_fdm
+from library.models import solve_darcy_fdm, cfl_value
 from library.visualize import animate_hydrology
 
 
@@ -21,14 +21,14 @@ RES_X = 64
 RES_Y = RES_X
 
 # physical resolution
-DX = 100_000 # cm
+DX = 1 # cm
 DY = DX # cm
-DT = 24 # hr
+DT = 1e-3 # hr
 
 # ground properties
 K_PATH = 'data/SaturatedHydraulicConductivity_1km/KSat_Arithmetic_1km.tif' # hydraulic conductivity is a measure of flow distance over time. (data in centimeters per hour)
-SS = -14e-2 # specific storage is a quantity representing the volume of water released from storage per unit decline in hydraulic head. SI unit: inverse length
-RR = 1e-8 # recharge rate is a positive contribution to the hydraulic head
+SS = 0.1 # specific storage is a quantity representing the volume of water released from storage per unit decline in hydraulic head. SI unit: inverse length
+RR = 1e-3 # recharge rate is a positive contribution to the hydraulic head
 
 # raster coordinates for upper left corner of cropped region from hydraulic conductivity data
 K_CROP_X = 3250
@@ -64,9 +64,8 @@ def simulate_hydraulic_surface_fdm(h, k, n_steps, dt, dx, dy, ss, rr):
 	assert h.shape == k.shape, f"ASSERT: Arrays h and k must have same shape: h.shape={h.shape}, k.shape={k.shape}."
 	assert len(h.shape) == 2, f"ASSERT: Grid must be 2D: shape={h.shape}."
 	
-	# stability check (Courant–Friedrichs–Lewy)
-	cfl_value = jnp.max(k) * dt * (1 / dx**2 + 1 / dy**2) / ss
-	if cfl_value >= 0.25:
+	# CFL stability check
+	if cfl_value(k, dt, dx, dy, ss) >= 0.25:
 		print(f"WARN: Proceeding with unstable simulation. CFL condition (CFL<0.25) not satisfied (CFL={cfl_value:.3f}), reduce dt or increase dx.\n")
 	
 	# iterate solver over time
@@ -88,8 +87,8 @@ k_crop = k[K_CROP_Y:K_CROP_Y+RES_Y, K_CROP_X:K_CROP_X+RES_X]
 k_crop = jnp.minimum(jnp.maximum(k_crop, 0), 10)
 
 # run fdm simulation
-#init_h = jnp.ones((RES_X, RES_Y))
-init_h = jnp.array([[jnp.sin(jnp.pi*x)*jnp.sin(jnp.pi*y) for x in jnp.linspace(0,1,RES_X)] for y in jnp.linspace(0,1,RES_Y)])
+init_h = jnp.ones((RES_X, RES_Y))
+#init_h = jnp.array([[jnp.sin(jnp.pi*x)*jnp.sin(jnp.pi*y) for x in jnp.linspace(0,1,RES_X)] for y in jnp.linspace(0,1,RES_Y)])
 sim_h = simulate_hydraulic_surface_fdm(init_h, k_crop, N_STEPS, DT, DX, DY, SS, RR)
 print(f"Simulation completed.")
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")

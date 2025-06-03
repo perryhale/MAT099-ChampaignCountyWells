@@ -34,11 +34,10 @@ Image.MAX_IMAGE_PIXELS = 1e16 # for 100m data
 # load/unpack
 with np.load(I_CACHE) as data_interpolated:
 	k = np.array(Image.open(K_PATH))
-	k_crop = data_interpolated['k_crop']
 	k_crop_idx = data_interpolated['k_crop_idx']
 	target_north_idx, target_south_idx, target_west_idx, target_east_idx = k_crop_idx
 	print("Loaded cache")
-	print(k_crop.shape)
+	print(k.shape)
 	print(k_crop_idx)
 	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
@@ -48,8 +47,8 @@ plt.colorbar()
 plt.scatter([target_west_idx, target_east_idx], [target_north_idx, target_south_idx], c='red', marker='+')
 plt.gca().add_patch(Rectangle(
 	(target_west_idx, target_north_idx),
-	k_crop.shape[1],
-	k_crop.shape[0],
+	target_east_idx-target_west_idx,
+	target_south_idx-target_north_idx,
 	edgecolor='red',
 	facecolor=None,
 	fill=False,

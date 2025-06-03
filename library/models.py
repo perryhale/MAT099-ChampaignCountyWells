@@ -21,3 +21,14 @@ def solve_darcy_fdm(h, k, dt, dx, dy, ss, rr):
 	next_state = h + dt / ss * (k * laplacian + rr)
 	
 	return next_state
+
+# type: (jnp.array, float, float, float, float) -> float
+@jax.jit
+def cfl_value(k, dt, dx, dy, ss):
+	""" Courant–Friedrichs–Lewy simulatoin stability value, typically must be less than 1/4.
+	arg: k: jnp.array: 2D array representing hydraulic conductivity
+	args: dt, dx, dy: float: Size of discretizations
+	arg: ss: float: Specific-storage coefficient
+	returns: float: CFL value
+	"""
+	return jnp.max(k) * dt * (1 / dx**2 + 1 / dy**2) / ss

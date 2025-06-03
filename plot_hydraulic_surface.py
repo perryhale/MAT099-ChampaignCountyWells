@@ -51,11 +51,15 @@ if DEBUG_PLOTS:
 	plt.imshow(grid_x)
 	plt.title("grid_x")
 	plt.show()
+	print("Closed plot")
+	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 	
-	# grid_y increases lower->upper, k increases lower->upper
+	# grid_y increases lower->upper, (k increases lower->upper)
 	plt.imshow(grid_y)
 	plt.title("grid_y")
 	plt.show()
+	print("Closed plot")
+	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 	
 	# init plot
 	fig, axis = plt.subplots(figsize=(10,7), nrows=2, ncols=2)
@@ -64,10 +68,10 @@ if DEBUG_PLOTS:
 	(ax11, ax12) = row1
 	
 	# plot images
-	im01 = ax01.imshow(k_crop, aspect='equal', cmap='viridis', extent=grid_extent)
-	im02 = ax02.imshow(h_time[-1], aspect='equal', cmap='Blues', extent=grid_extent)
-	im11 = ax11.imshow(k_crop, aspect='equal', cmap='viridis')
-	im12 = ax12.imshow(h_time[-1], aspect='equal', cmap='Blues')
+	im01 = ax01.imshow(k_crop, cmap='viridis', extent=grid_extent)
+	im02 = ax02.imshow(h_time[-1], cmap='Blues', extent=grid_extent)
+	im11 = ax11.imshow(k_crop, cmap='viridis', aspect='equal')
+	im12 = ax12.imshow(h_time[-1], cmap='Blues', aspect='equal')
 	
 	# scatter wells
 	for ax in row0:
