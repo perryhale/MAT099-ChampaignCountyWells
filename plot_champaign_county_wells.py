@@ -1,6 +1,7 @@
 import time
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.patches import Rectangle
 from PIL import Image
 from library.visualize import animate_hydrology
 
@@ -11,19 +12,22 @@ T0 = time.time()
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 # input paths
+K_PATH = 'data/SaturatedHydraulicConductivity_1km/KSat_Arithmetic_1km.tif'
 I_CACHE = 'data/processed/data_interpolated.npz'
 
 # plotting arguments
-VIDEO_SAVE = True
+VIDEO_SAVE = False
 VIDEO_FRAME_SKIP = 4000
 DEBUG_PLOTS = True
 
 
 ### main
 
-# load/unpack
+# load/unpack cache
 with np.load(I_CACHE) as data_interpolated:
+	k = np.array(Image.open(K_PATH))
 	k_crop = data_interpolated['k_crop']
+	k_crop_idx = data_interpolated['k_crop_idx']
 	grid_x = data_interpolated['grid_x']
 	grid_y = data_interpolated['grid_y']
 	h_time = data_interpolated['h_time']
@@ -33,15 +37,18 @@ with np.load(I_CACHE) as data_interpolated:
 	data_bound_w = grid_x.min()
 	data_bound_e = grid_x.max()
 	grid_extent = (data_bound_w, data_bound_e, data_bound_s, data_bound_n)
+	target_north_idx, target_south_idx, target_west_idx, target_east_idx = k_crop_idx
 	print("Loaded cache")
 	print("Bounding area:")
 	print("North:", data_bound_n)
 	print("South:", data_bound_s)
 	print("West:", data_bound_w)
 	print("East:", data_bound_e)
-	print(data_wells.shape)
+	print(k.shape)
+	print(k_crop_idx)
 	print(k_crop.shape)
 	print(h_time.shape)
+	print(data_wells.shape)
 	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 ###! debug plots
@@ -104,5 +111,23 @@ animate_hydrology(
 	frame_skip=VIDEO_FRAME_SKIP,
 	save_path=__file__.replace('.py','.mp4') if VIDEO_SAVE else None
 )
+print("Closed plot")
+print(f"[Elapsed time: {time.time()-T0:.2f}s]")
+
+# interactive Ksat plot of well area
+plt.imshow(k, vmin=0, vmax=25)
+plt.colorbar()
+plt.scatter([target_west_idx, target_east_idx], [target_north_idx, target_south_idx], c='red', marker='+')
+plt.gca().add_patch(Rectangle(
+	(target_west_idx, target_north_idx),
+	target_east_idx-target_west_idx,
+	target_south_idx-target_north_idx,
+	edgecolor='red',
+	facecolor=None,
+	fill=False,
+	lw=1
+))
+plt.tight_layout()
+plt.show()
 print("Closed plot")
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")

@@ -11,7 +11,6 @@ from library.data import (
 	crop_matrix_crs,
 	interpolate_hydraulic_grid
 )
-from library.visualize import animate_hydrology
 
 
 ### parameters
