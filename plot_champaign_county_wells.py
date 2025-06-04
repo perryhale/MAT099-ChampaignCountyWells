@@ -5,6 +5,7 @@ from matplotlib.patches import Rectangle
 from PIL import Image
 from library.visualize import animate_hydrology
 
+
 ### setup
 
 # start timer
@@ -100,8 +101,8 @@ if DEBUG_PLOTS:
 animate_hydrology(
 	h_time,
 	k=k_crop,
-#	grid_extent=grid_extent,
-#	scatter_data=data_wells.T,
+	grid_extent=grid_extent,
+	scatter_data=data_wells.T,
 	scatter_labels=True,
 	xlabel="Longitude",
 	ylabel="Latitude",
@@ -109,13 +110,13 @@ animate_hydrology(
 	cbar=True,
 	cbar_label="cm/hr",
 	frame_skip=VIDEO_FRAME_SKIP,
-	save_path=__file__.replace('.py','.mp4') if VIDEO_SAVE else None
+	save_path=__file__.replace('.py','_animation.mp4') if VIDEO_SAVE else None
 )
 print("Closed plot")
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 # interactive Ksat plot of well area
-plt.imshow(k, vmin=0, vmax=25)
+plt.imshow(np.minimum(k, 999), vmin=0, vmax=25) # clipped to stop Inf error
 plt.colorbar()
 plt.scatter([target_west_idx, target_east_idx], [target_north_idx, target_south_idx], c='red', marker='+')
 plt.gca().add_patch(Rectangle(

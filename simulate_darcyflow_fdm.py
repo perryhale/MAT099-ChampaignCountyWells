@@ -1,10 +1,15 @@
+# base
 import time
 
+# computation
 import jax
 import jax.numpy as jnp
+
+# utility
 from PIL import Image
 from tqdm import tqdm
 
+# local
 from library.models import solve_darcy_fdm, cfl_value
 from library.visualize import animate_hydrology
 

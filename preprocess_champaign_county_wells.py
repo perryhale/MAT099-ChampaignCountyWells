@@ -8,7 +8,7 @@ from PIL import Image
 from tqdm import tqdm
 
 from library.data import (
-	crop_matrix_crs,
+	crop_matrix_linear,
 	interpolate_hydraulic_grid
 )
 
@@ -46,12 +46,12 @@ def filter_well_data(data_location, data_measure):
 	data_filtered[['P_NUMBER', 'TIMESTAMP', 'DTW_FT_Reviewed']] = data_measure[['P_Number', 'TIMESTAMP', 'DTW_FT_Reviewed']]
 	
 	# 2. Map over 'P_NUMBER' to get ['LONG_NAD_83', 'LAT_NAD_83', 'LS_ELEV_FT'] columns for each measurement
-	data_filtered = data_filtered.merge(data_location[['P_NUMBER', 'LONG_NAD_83', 'LAT_NAD_83', 'LS_ELEV_FT']], on='P_NUMBER', how='left')
+	data_filtered = data_filtered.merge(data_location[['P_NUMBER', 'X_EPSG6350','Y_EPSG6350', 'LS_ELEV_FT']], on='P_NUMBER', how='left')
 	
 	# 3. Get 'HYDRAULIC_HEAD_FT' column by subtracting depth to water from land surface over sealevel
 	data_filtered['HYDRAULIC_HEAD_FT'] = data_filtered['LS_ELEV_FT'] - data_filtered['DTW_FT_Reviewed']
 	
-	# 4. Convert date-strings to integer seconds, set start to zero
+	# 4. Convert date-strings to integer epoch seconds, set start to zero
 	data_filtered['TIMESTAMP'] = data_filtered['TIMESTAMP'].map(lambda usd_str: int(datetime.datetime.strptime(usd_str, "%m/%d/%Y").timestamp()))
 	data_filtered['TIMESTAMP'] = data_filtered['TIMESTAMP'] - data_filtered['TIMESTAMP'].min()
 	
@@ -76,6 +76,26 @@ print(data_measure)
 print("Well#:", len(Counter(data_measure['P_Number']))) ###! only 18 wells in measurement data
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
+
+
+
+
+
+
+
+###! transform coordinates from GIS NAD83 (EPSG:6318) to Conus Albers (EPSG:6350)
+import pyproj
+transform_obj = pyproj.Transformer.from_crs("EPSG:6318", "EPSG:6350", always_xy=True)
+transform_fn = lambda lon, lat: transform_obj.transform(lon, lat) # type: (float, float) -> (float, float)
+data_location[['X_EPSG6350','Y_EPSG6350']] = data_location[['LONG_NAD_83', 'LAT_NAD_83']].apply(lambda row : pd.Series(transform_fn(*row)), axis=1)
+
+K_BOUND_W, K_BOUND_N = transform_fn(K_BOUND_W, K_BOUND_N)
+K_BOUND_E, K_BOUND_S = transform_fn(K_BOUND_E, K_BOUND_S)
+
+
+
+
+
 # try|create data_filtered_metric, data_surface caches
 try:
 	data_filtered_metric = pd.read_csv(M_CACHE)
@@ -96,7 +116,7 @@ except FileNotFoundError as e:
 	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 	
 	# convert units
-	data_filtered_metric = pd.DataFrame(data_filtered[['UNIQUE_ID', 'P_NUMBER', 'TIMESTAMP', 'LONG_NAD_83', 'LAT_NAD_83']])
+	data_filtered_metric = pd.DataFrame(data_filtered[['UNIQUE_ID', 'P_NUMBER', 'TIMESTAMP', 'X_EPSG6350','Y_EPSG6350']])
 	data_filtered_metric['HYDRAULIC_HEAD_M'] = data_filtered['HYDRAULIC_HEAD_FT'] / 3.281 # 3.281ft ~= 1m
 	print(data_filtered_metric)
 	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
@@ -117,7 +137,7 @@ except FileNotFoundError as e:
 		print(f"Saved \"{path}\" [Elapsed time: {time.time()-T0:.2f}s]")
 
 # determine well and bounding area coordinates
-data_wells = data_location.set_index('P_NUMBER').loc[data_surface.columns, ['LONG_NAD_83', 'LAT_NAD_83']].to_numpy()
+data_wells = data_location.set_index('P_NUMBER').loc[data_surface.columns][['X_EPSG6350','Y_EPSG6350']].to_numpy()#['LONG_NAD_83', 'LAT_NAD_83']].to_numpy()
 data_bound_n = data_wells[:,1].max()
 data_bound_s = data_wells[:,1].min()
 data_bound_w = data_wells[:,0].min()
@@ -133,7 +153,7 @@ print("East:", data_bound_e)
 # East: -87.981028
 
 # crop k and interpolate h
-k_crop, k_crop_idx = crop_matrix_crs(k, (K_BOUND_N, K_BOUND_S, K_BOUND_W, K_BOUND_E), (data_bound_n, data_bound_s, data_bound_w, data_bound_e))
+k_crop, k_crop_idx = crop_matrix_linear(k, (K_BOUND_N, K_BOUND_S, K_BOUND_W, K_BOUND_E), (data_bound_n, data_bound_s, data_bound_w, data_bound_e), verbose=True)
 grid_x, grid_y = np.meshgrid(
 	np.linspace(data_bound_w, data_bound_e, k_crop.shape[1]),
 	np.linspace(data_bound_n, data_bound_s, k_crop.shape[0])

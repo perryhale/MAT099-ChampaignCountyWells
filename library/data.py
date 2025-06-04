@@ -6,66 +6,66 @@ from scipy import interpolate
 
 
 # type: (np.ndarray, Tuple[float, float, float, float], Tuple[float, float, float, float], bool) -> Tuple[np.ndarray, np.ndarray]
-def crop_matrix_crs(matrix, coord_bound, coord_target, verbose=False):
+def crop_matrix_linear(matrix, bound, target, verbose=False):
 	
 	###! Does not handle curvature, results in incorrect projection
 	
 	# assertions
 	assert len(matrix.shape) >= 2, f"Argument matrix must have at least two axis, got {len(matrix.shape)} axis."
-	assert len(coord_bound) == 4, f"Argument coord_bound must be a 4-tuple got length {len(coord_bound)}."
-	assert len(coord_target) == 4, f"Argument coord_target must be a 4-tuple got length {len(coord_target)}."
+	assert len(bound) == 4, f"Argument bound must be a 4-tuple got length {len(bound)}."
+	assert len(target) == 4, f"Argument target must be a 4-tuple got length {len(target)}."
 	
 	# unpack
-	bound_north, bound_south, bound_west, bound_east = coord_bound
-	target_north, target_south, target_west, target_east = coord_target
+	bound_top, bound_bottom, bound_left, bound_right = bound
+	target_top, target_bottom, target_left, target_right = target
 	mat_width = matrix.shape[1]
 	mat_height = matrix.shape[0]
-	dx = (bound_east-bound_west) / mat_width
-	dy = (bound_north-bound_south) / mat_height
+	dx = (bound_right-bound_left) / mat_width
+	dy = (bound_top-bound_bottom) / mat_height
 	if verbose:
-		print("crop_matrix_nad83: Unpack")
-		print(coord_bound)
-		print(coord_target)
+		print("Unpacked values")
+		print(bound)
+		print(target)
 		print(mat_width)
 		print(mat_height)
 		print(dx)
 		print(dy)
 	
 	# project to index
-	target_north_idx = (bound_north-target_north) / dy
-	target_south_idx = (bound_north-target_south) / dy
-	target_west_idx = (target_west-bound_west) / dx
-	target_east_idx = (target_east-bound_west) / dx
+	target_top_idx = (bound_top-target_top) / dy
+	target_bottom_idx = (bound_top-target_bottom) / dy
+	target_left_idx = (target_left-bound_left) / dx
+	target_right_idx = (target_right-bound_left) / dx
 	if verbose:
-		print("crop_matrix_nad83: Index projection")
-		print(target_north_idx)
-		print(target_south_idx)
-		print(target_west_idx)
-		print(target_east_idx)
-	target_north_idx = round(target_north_idx)
-	target_south_idx = round(target_south_idx)
-	target_west_idx = round(target_west_idx)
-	target_east_idx = round(target_east_idx)
+		print("Relative index")
+		print(target_top_idx)
+		print(target_bottom_idx)
+		print(target_left_idx)
+		print(target_right_idx)
+	target_top_idx = round(target_top_idx)
+	target_bottom_idx = round(target_bottom_idx)
+	target_left_idx = round(target_left_idx)
+	target_right_idx = round(target_right_idx)
 	if verbose:
-		print("crop_matrix_nad83: Index rounding")
-		print(target_north_idx)
-		print(target_south_idx)
-		print(target_west_idx)
-		print(target_east_idx)
+		print("Rounded index")
+		print(target_top_idx)
+		print(target_bottom_idx)
+		print(target_left_idx)
+		print(target_right_idx)
 	
 	# determine crop coordinates
-	crop_x = target_west_idx
-	crop_y = target_north_idx
-	crop_w = target_east_idx-target_west_idx
-	crop_h = target_south_idx-target_north_idx
+	crop_x = target_left_idx
+	crop_y = target_top_idx
+	crop_w = target_right_idx-target_left_idx
+	crop_h = target_bottom_idx-target_top_idx
 	if verbose:
-		print("crop_matrix_nad83: Crop coordinates")
-		print(f"({crop_y},{crop_x})")
-		print(f"({crop_h},{crop_w})")
+		print("Crop dimensions")
+		print(f"[y0,x0]: ({crop_y},{crop_x})")
+		print(f"[h,w]: ({crop_h},{crop_w})")
 	
 	# slice matrix
 	matrix_crop = matrix[crop_y:crop_y+crop_h, crop_x:crop_x+crop_w]
-	crop_idx = np.array((target_north_idx, target_south_idx, target_west_idx, target_east_idx))
+	crop_idx = np.array((target_top_idx, target_bottom_idx, target_left_idx, target_right_idx))
 	
 	return matrix_crop, crop_idx
 
