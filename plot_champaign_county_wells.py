@@ -17,9 +17,9 @@ K_PATH = 'data/SaturatedHydraulicConductivity_1km/KSat_Arithmetic_1km.tif'
 I_CACHE = 'data/processed/data_interpolated.npz'
 
 # plotting arguments
+DEBUG_PLOTS = False
 VIDEO_SAVE = False
 VIDEO_FRAME_SKIP = 4000
-DEBUG_PLOTS = True
 
 
 ### main
@@ -84,7 +84,7 @@ if DEBUG_PLOTS:
 	# scatter wells
 	for ax in row0:
 		ax.scatter(data_wells[:,0], data_wells[:,1], c='red', s=16, marker='x')
-		for x, y in zip(data_wells[:,0], data_wells[:,1]):
+		for x, y in data_wells:
 			ax.text(x, y-0.01, f'({x:.2f}, {y:.2f})', color='red', fontsize=8, ha='center')
 	
 	# add colorbars

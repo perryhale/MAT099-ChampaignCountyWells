@@ -23,7 +23,7 @@ def crop_matrix_linear(matrix, bound, target, verbose=False):
 	dx = (bound_right-bound_left) / mat_width
 	dy = (bound_top-bound_bottom) / mat_height
 	if verbose:
-		print("Unpacked values")
+		print("Unpacked values:")
 		print(bound)
 		print(target)
 		print(mat_width)
@@ -37,7 +37,7 @@ def crop_matrix_linear(matrix, bound, target, verbose=False):
 	target_left_idx = (target_left-bound_left) / dx
 	target_right_idx = (target_right-bound_left) / dx
 	if verbose:
-		print("Relative index")
+		print("Relative index:")
 		print(target_top_idx)
 		print(target_bottom_idx)
 		print(target_left_idx)
@@ -47,7 +47,7 @@ def crop_matrix_linear(matrix, bound, target, verbose=False):
 	target_left_idx = round(target_left_idx)
 	target_right_idx = round(target_right_idx)
 	if verbose:
-		print("Rounded index")
+		print("Rounded index:")
 		print(target_top_idx)
 		print(target_bottom_idx)
 		print(target_left_idx)
@@ -59,7 +59,7 @@ def crop_matrix_linear(matrix, bound, target, verbose=False):
 	crop_w = target_right_idx-target_left_idx
 	crop_h = target_bottom_idx-target_top_idx
 	if verbose:
-		print("Crop dimensions")
+		print("Crop dimensions:")
 		print(f"[y0,x0]: ({crop_y},{crop_x})")
 		print(f"[h,w]: ({crop_h},{crop_w})")
 	
