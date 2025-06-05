@@ -39,15 +39,15 @@ RHO = 25e-2
 
 # load cache
 with jnp.load(I_CACHE) as data_interpolated:
-	k = data_interpolated['k_crop']
+	k_crop = data_interpolated['k_crop']
 	h_time = data_interpolated['h_time']
 	print("Loaded cache")
-	print(k.shape)
+	print(k_crop.shape)
 	print(h_time.shape)
 	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 # # rescale K
-# k = k * 24e-5 # km/day
+# k_crop = k_crop * 24e-5 # km/day
 # print(k_scaled.mean())
 # print(k_scaled.var())
 
@@ -59,8 +59,8 @@ print(data_y.shape)
 
 # define model
 params = jnp.array((0.1, 0.1))
-model = jax.vmap(lambda params,x: solve_darcy_fdm(x, k, DT, DX, DY, params[0], params[1]), in_axes=(None, 0))
-loss_fn = lambda params,x,y: jnp.mean(jnp.pow(y - model(params, x), 2))
+model = jax.vmap(lambda p,x: solve_darcy_fdm(x, k_crop, DT, DX, DY, p[0], p[1]), in_axes=(None, 0))
+loss_fn = lambda p,x,y: jnp.mean(jnp.pow(y - model(p, x), 2))
 print(params)
 
 # setup optimzer
@@ -72,11 +72,11 @@ history = {'loss':[], 'params':[]}
 print(n_batch)
 
 @jax.jit
-def optimizer_step(state, params, x, y):
-	loss, grad = jax.value_and_grad(loss_fn)(params, x, y)
-	updates, state = optim.update(grad, state, params)
-	next_params = optax.apply_updates(params, updates)
-	return loss, state, next_params
+def optimizer_step(s, p, x, y):
+	loss, grad = jax.value_and_grad(loss_fn)(p, x, y)
+	updates, next_state = optim.update(grad, s, p)
+	next_params = optax.apply_updates(p, updates)
+	return loss, next_state, next_params
 
 # fit model
 for i in range(EPOCHS):
@@ -89,7 +89,7 @@ for i in range(EPOCHS):
 	for j in range(n_batch):
 		
 		# cfl stability check
-		if cfl_value(k, DT, DX, DY, params[0]) >= 0.25:
+		if cfl_value(k_crop, DT, DX, DY, params[0]) >= 0.25:
 			print(f"WARN: Proceeding with unstable simulation. CFL condition (CFL<0.25) not satisfied (CFL={cfl_value:.3f}), reduce dt or increase dx.")
 		
 		# compute loss and gradient

@@ -3,6 +3,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from scipy import interpolate
+import multiprocessing
 
 
 # type: (np.ndarray, Tuple[float, float, float, float], Tuple[float, float, float, float], bool) -> Tuple[np.ndarray, np.ndarray]
@@ -78,14 +79,13 @@ def interpolate_hydraulic_grid(values, coords, grid_x, grid_y):
 	# 3. nearest interpolation
 	# 4. combine lin interp over near interp by filling NaN values
 	grid_z_linear = interpolate.griddata(coords, values, (grid_x, grid_y), method='linear')
-	grid_z_nearest = interpolate.griddata(coords, values, (grid_x, grid_y), method='nearest')
-	grid_z = np.where(np.isnan(grid_z_linear), grid_z_nearest, grid_z_linear)
+	#grid_z_nearest = interpolate.griddata(coords, values, (grid_x, grid_y), method='nearest')
+	#grid_z_near_lin = np.where(np.isnan(grid_z_linear), grid_z_nearest, grid_z_linear)
+	#grid_z_zero_lin = np.where(np.isnan(grid_z_linear), 0., grid_z_linear)
+	grid_z_mean_lin = np.where(np.isnan(grid_z_linear), jnp.mean(values), grid_z_linear)
+	#grid_z_rbf_mean_lin = interpolate.Rbf(grid_x, grid_y, grid_z_mean_lin, function='multiquadric') ###! unimplemented
 	
-	# 5. smoothing
-	#grid_z_quadratic = interpolate.Rbf(grid_x, grid_y, grid_z_linear, function='multiquadric')
-	#RectBivariateSpline(, kx=2, ky=2)
-	
-	return grid_z
+	return grid_z_mean_lin
 
 
 # type: (np.ndarray, np.ndarray, int, bool) ~> Tuple[np.ndarray, np.ndarray]
@@ -103,3 +103,24 @@ def batch_generator(data_x, data_y, batch_size, shuffle_key=None):
 			batch_x = data_x[batch_idx]
 			batch_y = data_y[batch_idx]
 			yield batch_x, batch_y
+
+
+# # type: (List, (List)->List, int) -> List
+# def multiprocess_list(list_data, list_proc_fn, max_threads=999):
+	
+	# ###! slower than list comp
+	
+	# # determine thread count
+	# n_threads = min(multiprocessing.cpu_count(), max_threads)
+	# print(f"Using {n_threads} CPUs..")
+	
+	# # prepare jobs
+	# job_size = len(list_data) // n_threads
+	# job_data = [list_data[i:i+job_size] for i in range(0, len(list_data), job_size)]
+	
+	# # pool worker results
+	# with multiprocessing.Pool(n_threads) as pool:
+		# result = pool.map(list_proc_fn, job_data)
+		# result = [item for sublist in result for item in sublist]
+	
+	# return result
