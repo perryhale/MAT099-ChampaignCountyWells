@@ -74,10 +74,8 @@ import pyproj
 transform_obj = pyproj.Transformer.from_crs("EPSG:6319", "EPSG:6350", always_xy=True)
 transform_fn = lambda lon, lat: transform_obj.transform(lon, lat) # type: (float, float) -> (float, float)
 
-# try|create data_filtered_metric, data_surface caches
+# try cache
 try:
-	#raise(FileNotFoundError("Caching is disabled"))
-	
 	data_filtered_metric = pd.read_csv(M_CACHE)
 	data_surface = pd.read_csv(S_CACHE, index_col='TIMESTAMP')
 	data_surface.columns = data_surface.columns.astype('int32')
@@ -86,6 +84,7 @@ try:
 	print(data_surface)
 	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
+# create data_filtered_metric, data_surface caches
 except FileNotFoundError as e:
 	print("Creating cache")
 	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
@@ -141,14 +140,14 @@ grid_x, grid_y = np.meshgrid(
 	np.linspace(data_bound_n, data_bound_s, k_crop.shape[0])
 )
 h_time_const = data_surface.mean().mean() ###! information leak
-h_time = np.array([interpolate_hydraulic_grid_linear_const(row, data_wells, grid_x, grid_y, const=h_time_const) for row in tqdm(data_surface.to_numpy(), desc="Grid interpolation")])
+h_time = np.array([interpolate_hydraulic_grid_linear_const(row, data_wells, grid_x, grid_y, h_time_const) for row in tqdm(data_surface.to_numpy(), desc="Grid interpolation")])
 print(data_wells.shape)
 print(k_crop.shape)
 print(h_time.shape)
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 # (18, 2)
-# (42, 45)
-# (5442, 42, 45)
+# (41, 40)
+# (5442, 41, 40)
 
 # create cache
 np.savez(I_CACHE,

@@ -7,7 +7,12 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 
 from library.data import batch_generator
-from library.models import solve_darcy_fdm, cfl_value
+from library.models import (
+	solve_darcy_fdm,
+	cfl_value,
+	simulate_hydraulic_surface_fdm
+)
+from library.visualize import animate_hydrology
 
 
 ### setup
@@ -24,15 +29,22 @@ RNG_SEED = 999
 K0 = jax.random.key(RNG_SEED)
 
 # grid scale
-DX = 100_000 # cm
-DY = DX # cm
-DT = 24 # hr
+DX = 100_000 # km
+DY = DX # km
+DT = 24 # day
 
 # optimizer
 EPOCHS = 1
-BATCH_SIZE = 32
+BATCH_SIZE = 16
 ETA = 1e-6
 RHO = 25e-2
+
+# simulation
+N_STEPS = 10_000
+
+# plotting
+VIDEO_FRAME_SKIP = 0
+VIDEO_SAVE = False
 
 
 ### main
@@ -46,10 +58,12 @@ with jnp.load(I_CACHE) as data_interpolated:
 	print(h_time.shape)
 	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
-# # rescale K
-# k_crop = k_crop * 24e-5 # km/day
-# print(k_scaled.mean())
-# print(k_scaled.var())
+# rescale K
+k_crop = k_crop # cm/hr
+#k_crop = k_crop * 24e-5 # km/day
+#k_crop = k_crop * 36e4**-1 # m/s
+print(k_crop.mean())
+print(k_crop.var())
 
 # truncate+partition data
 data_x = h_time[4_041:][:-1]
@@ -89,8 +103,9 @@ for i in range(EPOCHS):
 	for j in range(n_batch):
 		
 		# cfl stability check
-		if cfl_value(k_crop, DT, DX, DY, params[0]) >= 0.25:
-			print(f"WARN: Proceeding with unstable simulation. CFL condition (CFL<0.25) not satisfied (CFL={cfl_value:.3f}), reduce dt or increase dx.")
+		cfl = cfl_value(k_crop, DT, DX, DY, params[0])
+		if cfl >= 0.25:
+			print(f"WARN: Proceeding with unstable simulation. CFL condition (CFL<0.25) not satisfied (CFL={cfl:.3f}), reduce dt or increase dx.")
 		
 		# compute loss and gradient
 		batch_x, batch_y = next(data_generator)
@@ -101,10 +116,29 @@ for i in range(EPOCHS):
 		history['params'].append(params)
 		print(f"[Elapsed time: {time.time()-T0:.2f}s] epoch={i+1}, batch={j+1}, loss={batch_loss}, params={params}")
 
-# plot
+# simulate
+#h_init = data_y[-1]
+#h_init = jnp.ones(k_crop.shape)
+h_init = jnp.array([[jnp.sin(jnp.pi*x)*jnp.sin(jnp.pi*y) for x in jnp.linspace(0, 1, k_crop.shape[1])] for y in jnp.linspace(0, 1, k_crop.shape[0])])
+h_sim = simulate_hydraulic_surface_fdm(h_init, k_crop, N_STEPS, DT, DX, DY, *params)
+print(f"Simulation completed.")
+print(f"[Elapsed time: {time.time()-T0:.2f}s]")
+
+# plot optimzer history
 plt.plot(history['loss'])
 plt.xlabel("Iteration")
 plt.ylabel("Loss")
 plt.text(0.99*n_batch*EPOCHS, 0.08*max(history['loss']), f"ss={params[0]:.6f}\n rr={params[1]:.6f}", c='r', ha='right')
 plt.grid()
 plt.show()
+
+# animate simulation
+animate_hydrology(
+	h_sim,
+	k=k_crop,
+	axis_ticks=True,
+	frame_skip=VIDEO_FRAME_SKIP,
+	save_path=__file__.replace('.py','.mp4') if VIDEO_SAVE else None
+)
+print("Closed plot")
+print(f"[Elapsed time: {time.time()-T0:.2f}s]")
