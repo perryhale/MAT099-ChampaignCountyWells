@@ -19,7 +19,7 @@ I_CACHE = 'data/processed/data_interpolated.npz'
 # plotting arguments
 DEBUG_PLOTS = False
 VIDEO_SAVE = False
-VIDEO_FRAME_SKIP = 4000
+VIDEO_FRAME_SKIP = 5000
 
 
 ### main
@@ -104,8 +104,8 @@ animate_hydrology(
 	grid_extent=grid_extent,
 	scatter_data=data_wells.T,
 	scatter_labels=True,
-	xlabel="Longitude",
-	ylabel="Latitude",
+	xlabel="X_EPSG_6350",
+	ylabel="Y_EPSG_6350",
 	axis_ticks=True,
 	cbar=True,
 	cbar_label="cm/hr",
