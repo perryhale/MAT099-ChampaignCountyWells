@@ -38,7 +38,7 @@ with np.load(I_CACHE) as data_interpolated:
 	data_bound_w = grid_x.min()
 	data_bound_e = grid_x.max()
 	grid_extent = (data_bound_w, data_bound_e, data_bound_s, data_bound_n)
-	target_north_idx, target_south_idx, target_west_idx, target_east_idx = k_crop_idx
+	crop_west_idx, crop_south_idx, crop_east_idx, crop_north_idx = k_crop_idx
 	print("Loaded cache")
 	print("Bounding area:")
 	print("North:", data_bound_n)
@@ -118,11 +118,11 @@ print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 # interactive Ksat plot of well area
 plt.imshow(np.minimum(k, 999), vmin=0, vmax=25) # clipped to stop Inf error
 plt.colorbar()
-plt.scatter([target_west_idx, target_east_idx], [target_north_idx, target_south_idx], c='red', marker='+')
+plt.scatter([crop_west_idx, crop_east_idx], [crop_north_idx, crop_south_idx], c='red', marker='+')
 plt.gca().add_patch(Rectangle(
-	(target_west_idx, target_north_idx),
-	target_east_idx-target_west_idx,
-	target_south_idx-target_north_idx,
+	(crop_west_idx, crop_north_idx),
+	crop_east_idx-crop_west_idx,
+	crop_south_idx-crop_north_idx,
 	edgecolor='red',
 	facecolor=None,
 	fill=False,
