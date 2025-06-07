@@ -50,8 +50,8 @@ def apply_edge_boundary_conditions(h):
 	
 	return hhat
 
-# type: (jnp.array, jnp.array, int, float, float, float, float, float) -> List[jnp.array]
-def simulate_hydraulic_surface_fdm(h, k, n_steps, dt, dx, dy, ss, rr):
+# type: (jnp.array, jnp.array, int, float, float, float, float, float, List[(jnp.array)->jnp.array]) -> List[jnp.array]
+def simulate_hydraulic_surface_fdm(h, k, n_steps, dt, dx, dy, ss, rr, boundary_conditions=[apply_edge_boundary_conditions]):
 	
 	# assertions
 	assert h.shape == k.shape, f"ASSERT: Arrays h and k must have same shape: h.shape={h.shape}, k.shape={k.shape}."
@@ -67,7 +67,8 @@ def simulate_hydraulic_surface_fdm(h, k, n_steps, dt, dx, dy, ss, rr):
 	h_sim = [h]
 	for t in tqdm(range(n_steps-1)):
 		state = solve_darcy_fdm(state, k, dt, dx, dy, ss, rr)
-		state = apply_edge_boundary_conditions(state)
+		for bc_func in boundary_conditions:
+			state = bc_func(state)
 		h_sim.append(state)
 	
 	return h_sim

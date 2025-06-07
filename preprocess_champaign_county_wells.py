@@ -4,6 +4,7 @@ from collections import Counter
 
 import numpy as np
 import pandas as pd
+import pyproj
 from PIL import Image
 from tqdm import tqdm
 
@@ -70,7 +71,6 @@ print("Well#:", len(Counter(data_measure['P_Number']))) ###! only 18 wells in me
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 ###! transform coordinates from GIS NAD83 (EPSG:6319) to Conus Albers (EPSG:6350)
-import pyproj
 transform_obj = pyproj.Transformer.from_crs("EPSG:6319", "EPSG:6350", always_xy=True)
 transform_fn = lambda lon, lat: transform_obj.transform(lon, lat) # type: (float, float) -> (float, float)
 
@@ -128,10 +128,6 @@ print("North:", data_bound_n)
 print("South:", data_bound_s)
 print("West:", data_bound_w)
 print("East:", data_bound_e)
-# North: 40.385156
-# South: 40.05338
-# West: -88.463237
-# East: -87.981028
 
 # crop k and interpolate h
 k_crop, k_crop_idx = crop_raster(K_PATH, "EPSG:6350", data_bound_w, data_bound_s, data_bound_e, data_bound_n)
@@ -145,9 +141,6 @@ print(data_wells.shape)
 print(k_crop.shape)
 print(h_time.shape)
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")
-# (18, 2)
-# (41, 40)
-# (5442, 41, 40)
 
 # create cache
 np.savez(I_CACHE,
