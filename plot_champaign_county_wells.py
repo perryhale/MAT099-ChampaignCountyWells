@@ -17,7 +17,11 @@ K_PATH = 'data/SaturatedHydraulicConductivity_1km/KSat_Arithmetic_1km.tif'
 I_CACHE = 'data/processed/data_interpolated.npz'
 
 # plotting arguments
-DEBUG_PLOTS = False
+PLOT_DEBUG = False
+PLOT_HYDRO = False
+PLOT_KSAT = False
+PLOT_3DSF = True
+
 VIDEO_SAVE = False
 VIDEO_FRAME_SKIP = 5000
 
@@ -53,7 +57,7 @@ with np.load(I_CACHE) as data_interpolated:
 	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 ###! debug plots
-if DEBUG_PLOTS:
+if PLOT_DEBUG:
 	
 	# grid_x increases left->right
 	plt.imshow(grid_x)
@@ -98,37 +102,73 @@ if DEBUG_PLOTS:
 	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 # plot interpolated grids
-animate_hydrology(
-	h_time,
-	k=k_crop,
-	grid_extent=grid_extent,
-	scatter_data=data_wells.T,
-	scatter_labels=True,
-	xlabel="X_EPSG_6350",
-	ylabel="Y_EPSG_6350",
-	axis_ticks=True,
-	cbar=True,
-	cbar_label="cm/hr",
-	frame_skip=VIDEO_FRAME_SKIP,
-	save_path=__file__.replace('.py','_animation.mp4') if VIDEO_SAVE else None
-)
-print("Closed plot")
-print(f"[Elapsed time: {time.time()-T0:.2f}s]")
+if PLOT_HYDRO:
+	animate_hydrology(
+		h_time,
+		k=k_crop,
+		grid_extent=grid_extent,
+		scatter_data=data_wells.T,
+		scatter_labels=True,
+		xlabel="X_EPSG_6350",
+		ylabel="Y_EPSG_6350",
+		axis_ticks=True,
+		cbar=True,
+		cbar_label="cm/hr",
+		frame_skip=VIDEO_FRAME_SKIP,
+		save_path=__file__.replace('.py','_animation.mp4') if VIDEO_SAVE else None
+	)
+	print("Closed plot")
+	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 # interactive Ksat plot of well area
-plt.imshow(np.minimum(k, 999), vmin=0, vmax=25) # clipped to stop Inf error
-plt.colorbar()
-plt.scatter([crop_west_idx, crop_east_idx], [crop_north_idx, crop_south_idx], c='red', marker='+')
-plt.gca().add_patch(Rectangle(
-	(crop_west_idx, crop_north_idx),
-	crop_east_idx-crop_west_idx,
-	crop_south_idx-crop_north_idx,
-	edgecolor='red',
-	facecolor=None,
-	fill=False,
-	lw=1
-))
-plt.tight_layout()
-plt.show()
-print("Closed plot")
-print(f"[Elapsed time: {time.time()-T0:.2f}s]")
+if PLOT_KSAT:
+	plt.imshow(np.minimum(k, 999), vmin=0, vmax=25) # clipped to stop Inf error
+	plt.colorbar()
+	plt.scatter([crop_west_idx, crop_east_idx], [crop_north_idx, crop_south_idx], c='red', marker='+')
+	plt.gca().add_patch(Rectangle(
+		(crop_west_idx, crop_north_idx),
+		crop_east_idx-crop_west_idx,
+		crop_south_idx-crop_north_idx,
+		edgecolor='red',
+		facecolor=None,
+		fill=False,
+		lw=1
+	))
+	plt.tight_layout()
+	plt.show()
+	print("Closed plot")
+	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
+
+# animated 3d surface plot
+if PLOT_3DSF:
+	fig = plt.figure(figsize=(2, 2))
+	ax = fig.add_subplot(111, projection='3d')
+	ax.plot_surface(grid_x, grid_y, h_time[-1], cmap='Oranges', alpha=0.8, linewidth=0)
+	ax.set_xlabel('X')
+	ax.set_ylabel('Y')
+	ax.set_zlabel('Z')
+	plt.tight_layout()
+	for angle in reversed(range(0, 360, 4)):
+		ax.view_init(elev=20, azim=angle)
+		plt.draw()
+		plt.pause(0.001)
+	
+	# static 3d surface plot
+	fig = plt.figure(figsize=(5, 5))
+	ax = fig.add_subplot(111, projection='3d')
+	ax.plot_surface(grid_x, grid_y, h_time[5140], cmap='prism', alpha=0.8, linewidth=0)
+	
+	contours = ax.contour(
+		grid_x, grid_y, h_time[5140],
+		zdir='z',
+		offset=np.min(h_time[5140])-1,
+		levels=10,
+		cmap='Oranges'
+	)
+	ax.clabel(contours, fmt='%1.1f', colors='black', fontsize=8)
+	ax.view_init(elev=20, azim=270)
+	ax.set_xlabel('X')
+	ax.set_ylabel('Y')
+	ax.set_zlabel('Z')
+	plt.tight_layout()
+	plt.show()

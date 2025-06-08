@@ -43,10 +43,21 @@ def interpolate_hydraulic_grid(values, coords, grid_x, grid_y):
 	return grid_z_mean_lin
 
 # type: (np.ndarray, np.ndarray, np.ndarray, np.ndarray, float) -> np.ndarray
-def interpolate_hydraulic_grid_linear_const(values, coords, grid_x, grid_y, const):
+def interpolate_hydraulic_grid_linear_const(values, coords, grid_x, grid_y, const=0):
+	
 	grid_z_linear = interpolate.griddata(coords, values, (grid_x, grid_y), method='linear')
 	grid_z_linear_const = np.where(np.isnan(grid_z_linear), const, grid_z_linear)
+	
 	return grid_z_linear_const
+
+# type: (np.ndarray, np.ndarray, np.ndarray, np.ndarray) -> np.ndarray
+def interpolate_hydraulic_grid_rbf(values, coords, grid_x, grid_y):
+	
+	grid_points = np.column_stack([grid_x.ravel(), grid_y.ravel()]) # (n, 2)
+	rbf = interpolate.RBFInterpolator(coords, values, kernel='linear')
+	grid_z = rbf(grid_points).reshape(grid_x.shape)
+	
+	return grid_z
 
 # type: (np.ndarray, np.ndarray, int, bool) ~> Tuple[np.ndarray, np.ndarray]
 def batch_generator(data_x, data_y, batch_size, shuffle_key=None):
