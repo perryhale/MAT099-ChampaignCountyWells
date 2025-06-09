@@ -4,7 +4,7 @@ import jax.numpy as jnp
 from PIL import Image
 from tqdm import tqdm
 
-from library.models import (
+from library.models.fdm import (
 	solve_darcy_fdm,
 	cfl_value,
 	simulate_hydraulic_surface_fdm

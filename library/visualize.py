@@ -14,7 +14,7 @@ def animate_hydrology(
 		cbar = False, # bool
 		cbar_label=None, # str|None
 		contour_levels=10, # int
-		cmap_k = 'viridis', # str|?~plt.cm.*
+		cmap_k = 'BrBG', # str|?~plt.cm.*
 		cmap_contour = 'Oranges', # str|?~plt.cm.*
 		frame_interval=10, # int
 		frame_fps=60, # int
@@ -80,6 +80,35 @@ def animate_hydrology(
 	
 	return None
 
+# type: (jnp.array, jnp.array, jnp.array, jnp.array, tuple[int, int]) -> tuple[Figure, Axes]
+def plot_surface3d(grid_x, grid_y, grid_z, k=None, figsize=(5,5)):
+	
+	# init figure
+	fig = plt.figure(figsize=figsize)
+	ax = fig.add_subplot(111, projection='3d')
+	
+	# plot surface and contours
+	ax.plot_surface(grid_x, grid_y, grid_z, cmap='prism', alpha=0.8, linewidth=0)
+	contours = ax.contour(
+		grid_x, grid_y, grid_z,
+		zdir='z',
+		offset=np.min(grid_z)-1,
+		levels=10,
+		cmap='Oranges'
+	)
+	if k is not None:
+		ax.plot_surface(grid_x, grid_y, np.ones(grid_z.shape)*np.min(grid_z)-2, facecolors=plt.cm.BrBG(k/k.max()), shade=False)
+	
+	ax.view_init(elev=20, azim=270)
+	ax.set_xlabel('X_EPSG_6350')
+	ax.set_ylabel('Y_EPSG_6350')
+	ax.set_zlabel('Height (metres)', rotation=90)
+	ax.set_xticks([],[])
+	ax.set_yticks([],[])
+	plt.tight_layout()
+	plt.show()
+	
+	return fig, ax
 
 ###! debug and styling
 # colors='white', linestyles='dashed')

@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 
 from library.data import batch_generator
-from library.models import solve_darcy_fdm, cfl_value
+from library.models.fdm import solve_darcy_fdm, cfl_value
 
 
 ### setup
@@ -21,7 +21,7 @@ I_CACHE = 'data/processed/data_interpolated.npz'
 
 # RNG setup
 RNG_SEED = 999
-K0 = jax.random.key(RNG_SEED)
+K0, K1 = jax.random.split(jax.random.key(RNG_SEED))
 
 # grid scale
 DX = 100_000 # cm
@@ -61,7 +61,7 @@ print(data_x.shape)
 print(data_y.shape)
 
 # define model
-params = [jnp.ones(k_crop.shape)]
+params = [jnp.ones(k_crop.shape)]#[jax.random.uniform(K0, shape=k_crop.shape, minval=0, maxval=3)]
 model = jax.vmap(lambda p,x: solve_darcy_fdm(x, p[0], DT, DX, DY, SS, RR), in_axes=(None, 0))
 loss_fn = lambda p,x,y: jnp.mean(jnp.pow(y - model(p, x), 2))
 print(params)
@@ -69,7 +69,7 @@ print(params)
 # setup optimzer
 optim = optax.adamw(ETA)
 state = optim.init(params)
-epoch_key = K0
+epoch_key = K1
 n_batch = math.ceil(data_x.shape[0] / BATCH_SIZE)
 history = {'loss':[], 'params':[]}
 print(n_batch)

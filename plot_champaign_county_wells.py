@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 from PIL import Image
-from library.visualize import animate_hydrology
+from library.visualize import animate_hydrology, plot_surface3d
 
 
 ### setup
@@ -18,7 +18,7 @@ I_CACHE = 'data/processed/data_interpolated.npz'
 
 # plotting arguments
 PLOT_DEBUG = False
-PLOT_HYDRO = False
+PLOT_HYDRO = True
 PLOT_KSAT = False
 PLOT_3DSF = True
 
@@ -139,36 +139,7 @@ if PLOT_KSAT:
 	print("Closed plot")
 	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
-# animated 3d surface plot
+# static 3d surface plot
 if PLOT_3DSF:
-	fig = plt.figure(figsize=(2, 2))
-	ax = fig.add_subplot(111, projection='3d')
-	ax.plot_surface(grid_x, grid_y, h_time[-1], cmap='Oranges', alpha=0.8, linewidth=0)
-	ax.set_xlabel('X')
-	ax.set_ylabel('Y')
-	ax.set_zlabel('Z')
-	plt.tight_layout()
-	for angle in reversed(range(0, 360, 4)):
-		ax.view_init(elev=20, azim=angle)
-		plt.draw()
-		plt.pause(0.001)
-	
-	# static 3d surface plot
-	fig = plt.figure(figsize=(5, 5))
-	ax = fig.add_subplot(111, projection='3d')
-	ax.plot_surface(grid_x, grid_y, h_time[5140], cmap='prism', alpha=0.8, linewidth=0)
-	
-	contours = ax.contour(
-		grid_x, grid_y, h_time[5140],
-		zdir='z',
-		offset=np.min(h_time[5140])-1,
-		levels=10,
-		cmap='Oranges'
-	)
-	ax.clabel(contours, fmt='%1.1f', colors='black', fontsize=8)
-	ax.view_init(elev=20, azim=270)
-	ax.set_xlabel('X')
-	ax.set_ylabel('Y')
-	ax.set_zlabel('Z')
-	plt.tight_layout()
+	fig, axis = plot_surface3d(grid_x, grid_y, h_time[5140], k=k_crop)
 	plt.show()

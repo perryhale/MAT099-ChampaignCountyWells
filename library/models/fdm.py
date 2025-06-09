@@ -2,6 +2,9 @@ import jax
 import jax.numpy as jnp
 from tqdm import tqdm
 
+
+### FDM Solver
+
 # type: (jnp.array, jnp.array, float, float, float, float, float) -> jnp.array
 @jax.jit
 def solve_darcy_fdm(h, k, dt, dx, dy, ss, rr):

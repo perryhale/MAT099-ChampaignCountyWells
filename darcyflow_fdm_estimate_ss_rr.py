@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 
 from library.data import batch_generator
-from library.models import (
+from library.models.fdm import (
 	solve_darcy_fdm,
 	cfl_value,
 	simulate_hydraulic_surface_fdm
@@ -29,9 +29,9 @@ RNG_SEED = 999
 K0 = jax.random.key(RNG_SEED)
 
 # grid scale
-DX = 100_000 # km
-DY = DX # km
-DT = 24 # day
+DX = 1000
+DY = DX
+DT = 24
 
 # optimizer
 EPOCHS = 1
@@ -59,9 +59,10 @@ with jnp.load(I_CACHE) as data_interpolated:
 	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 # rescale K
-k_crop = k_crop # cm/hr
+#k_crop = k_crop # cm/hr
 #k_crop = k_crop * 24e-5 # km/day
 #k_crop = k_crop * 36e4**-1 # m/s
+k_crop = k_crop * 100 # m/hr
 print(k_crop.mean())
 print(k_crop.var())
 

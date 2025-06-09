@@ -10,9 +10,10 @@ from tqdm import tqdm
 
 from library.data import (
 	crop_raster,
-	interpolate_hydraulic_grid,
-	interpolate_hydraulic_grid_linear_const,
-	interpolate_hydraulic_grid_rbf
+	interp2d_ls,
+	interp2d_lrbf,
+	interp2d_gpr_rbf,
+	interp2d_ok
 )
 
 
@@ -138,11 +139,11 @@ grid_x, grid_y = np.meshgrid(
 )
 
 ###! interpolate surface using linear simplex with constant boundary condition
-# h_time_const = data_surface.mean().mean() ###! using global mean will cause information leak
-# h_time = np.array([interpolate_hydraulic_grid_linear_const(row, data_wells, grid_x, grid_y, const=h_time_const) for row in tqdm(data_surface.to_numpy(), desc="Grid interpolation")])
+#h_time_const = data_surface.mean().mean() ###! using global mean will cause information leak
+#h_time = np.array([interp2d_ls(row, data_wells, grid_x, grid_y, const=h_time_const) for row in tqdm(data_surface.to_numpy(), desc="Grid interpolation")])
 
 ###! interpolate surface using linear RBF
-h_time = np.array([interpolate_hydraulic_grid_rbf(row, data_wells, grid_x, grid_y) for row in tqdm(data_surface.to_numpy(), desc="Grid interpolation")])
+h_time = np.array([interp2d_lrbf(row, data_wells, grid_x, grid_y) for row in tqdm(data_surface.to_numpy(), desc="Grid interpolation")]) ###! [data_surface.to_numpy()[5140]]
 
 print(data_wells.shape)
 print(k_crop.shape)
