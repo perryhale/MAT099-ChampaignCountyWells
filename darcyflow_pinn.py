@@ -25,7 +25,7 @@ I_CACHE = 'data/processed/data_interpolated.npz'
 RNG_SEED = 999
 K0, K1 = jax.random.split(jax.random.key(RNG_SEED))
 
-# disretization and units
+# FDM disretization and units
 DX = 1000
 DY = DX
 DT = 24
@@ -41,11 +41,8 @@ PART_TRAIN = 0.75
 PART_VAL = 0.05
 PART_TEST = 0.20
 
-# learning rate
+# optimizer
 ETA = 1e-3
-#RHO = 25e-2
-
-# regularization
 REG_PHYS = 0.1
 REG_L2 = 0.025
 
@@ -108,9 +105,9 @@ test_steps = math.ceil(test_x.shape[0] / BATCH_SIZE)
 # memory cleanup
 del h_time; del data_train; del data_val; del data_test
 
-print(f"Train: x~{train_x.shape} y~{train_y.shape}, min={jnp.min(jnp.minimum(train_x, train_y))}, max={jnp.max(jnp.maximum(train_x, train_y))}, steps={train_steps}")
-print(f"Val: x~{val_x.shape} y~{val_y.shape}, min={jnp.min(jnp.minimum(val_x, val_y))}, max={jnp.max(jnp.maximum(val_x, val_y))}, steps={val_steps}")
-print(f"Test: x~{test_x.shape} y~{test_y.shape}, min={jnp.min(jnp.minimum(test_x, test_y))}, max={jnp.max(jnp.maximum(test_x, test_y))}, steps={test_steps}")
+print(f"Train: x~{train_x.shape} y~{train_y.shape}, min={jnp.min(jnp.minimum(train_x, train_y)):.2f}, max={jnp.max(jnp.maximum(train_x, train_y)):.2f}, steps={train_steps}")
+print(f"Val: x~{val_x.shape} y~{val_y.shape}, min={jnp.min(jnp.minimum(val_x, val_y)):.2f}, max={jnp.max(jnp.maximum(val_x, val_y)):.2f}, steps={val_steps}")
+print(f"Test: x~{test_x.shape} y~{test_y.shape}, min={jnp.min(jnp.minimum(test_x, test_y)):.2f}, max={jnp.max(jnp.maximum(test_x, test_y)):.2f}, steps={test_steps}")
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 
@@ -118,9 +115,10 @@ print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 # initialise model
 params = [
-	*init_dense_neural_network(K0, [grid_flat_size, 1_500//8, 750//8, 1_500//8, grid_flat_size]),
+	*init_dense_neural_network(K0, [grid_flat_size, 1_500//4, 750//4, 1_500//4, grid_flat_size]),
 	[0.1, 0.0]
 ]
+#pinn_model = jax.vmap(lambda p,x: jax.nn.sigmoid(dense_neural_network(p, x, a=jax.nn.tanh)), in_axes=(None, 0))
 pinn_model = jax.vmap(lambda p,x: dense_neural_network(p, x), in_axes=(None, 0))
 fdm_model = jax.vmap(solve_darcy_fdm, in_axes=[0]+6*[None])
 
@@ -235,15 +233,14 @@ print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 h_sim_mean = [h.mean() for h in h_sim[1:]]
 h_sim_var = [h.var() for h in h_sim[1:]]
 h_sim_rmse = [loss_mse(yh, y)**0.5 for yh,y in zip(h_sim[1:], test_y)]
-#plt.plot(h_sim_mean, label="Mean")
-#plt.plot(h_sim_var, label="Var")
+plt.plot(h_sim_mean, label="Mean")
+plt.plot(h_sim_var, label="Var")
 plt.plot(h_sim_rmse, label="RMSE")
 plt.legend()
 plt.grid()
 plt.xlabel("Time (days)")
 plt.ylabel("Height (metres)")
 plt.show()
-
 
 # animate simulation
 animate_hydrology(
