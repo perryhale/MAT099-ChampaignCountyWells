@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 
 from library.data import batch_generator
-from library.models.fdm import solve_darcy_fdm, cfl_value
+from library.models.fdm import darcyflow_fdm_periodic, cfl_value
 from library.models.nn import *
 from library.visualize import animate_hydrology, plot_surface3d
 
@@ -120,7 +120,7 @@ params = [
 ]
 #pinn_model = jax.vmap(lambda p,x: jax.nn.sigmoid(dense_neural_network(p, x, a=jax.nn.tanh)), in_axes=(None, 0))
 pinn_model = jax.vmap(lambda p,x: dense_neural_network(p, x), in_axes=(None, 0))
-fdm_model = jax.vmap(solve_darcy_fdm, in_axes=[0]+6*[None])
+fdm_model = jax.vmap(darcyflow_fdm_periodic, in_axes=[0]+6*[None])
 
 # define loss function
 # type: (List[Tuple[jnp.array]], jnp.array, jnp.array) -> float

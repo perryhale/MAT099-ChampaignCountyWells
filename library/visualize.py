@@ -62,6 +62,9 @@ def animate_hydrology(
 			if scatter_labels:
 				for x, y in scatter_data.T:
 					ax.text(x, y-0.015, f'({x:.2f}, {y:.2f})', color='red', fontsize=8, ha='center', zorder=999)
+		
+		###! debug
+		#plt.savefig(f"{t}.png")
 	
 	# render animation
 	ani = animation.FuncAnimation(fig, update, frames=len(h_time)-frame_skip, interval=frame_interval)

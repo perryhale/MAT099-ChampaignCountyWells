@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 
 from library.data import batch_generator
-from library.models.fdm import solve_darcy_fdm, cfl_value
+from library.models.fdm import darcyflow_fdm_periodic, cfl_value
 
 
 ### setup
@@ -62,7 +62,7 @@ print(data_y.shape)
 
 # define model
 params = [jnp.ones(k_crop.shape)]#[jax.random.uniform(K0, shape=k_crop.shape, minval=0, maxval=3)]
-model = jax.vmap(lambda p,x: solve_darcy_fdm(x, p[0], DT, DX, DY, SS, RR), in_axes=(None, 0))
+model = jax.vmap(lambda p,x: darcyflow_fdm_periodic(x, p[0], DT, DX, DY, SS, RR), in_axes=(None, 0))
 loss_fn = lambda p,x,y: jnp.mean(jnp.pow(y - model(p, x), 2))
 print(params)
 

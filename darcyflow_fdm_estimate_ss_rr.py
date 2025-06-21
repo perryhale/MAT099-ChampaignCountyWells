@@ -8,7 +8,7 @@ from tqdm import tqdm
 
 from library.data import batch_generator
 from library.models.fdm import (
-	solve_darcy_fdm,
+	darcyflow_fdm_periodic,
 	cfl_value,
 	simulate_hydraulic_surface_fdm
 )
@@ -74,7 +74,7 @@ print(data_y.shape)
 
 # define model
 params = jnp.array((0.1, 0.1))
-model = jax.vmap(lambda p,x: solve_darcy_fdm(x, k_crop, DT, DX, DY, p[0], p[1]), in_axes=(None, 0))
+model = jax.vmap(lambda p,x: darcyflow_fdm_periodic(x, k_crop, DT, DX, DY, p[0], p[1]), in_axes=(None, 0))
 loss_fn = lambda p,x,y: jnp.mean(jnp.pow(y - model(p, x), 2))
 print(params)
 
