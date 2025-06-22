@@ -58,17 +58,9 @@ with jnp.load(I_CACHE) as data_interpolated:
 	print(h_time.shape)
 	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
-# rescale K
-#k_crop = k_crop # cm/hr
-#k_crop = k_crop * 24e-5 # km/day
-#k_crop = k_crop * 36e4**-1 # m/s
-k_crop = k_crop * 100 # m/hr
-print(k_crop.mean())
-print(k_crop.var())
-
-# truncate+partition data
-data_x = h_time[4_041:][:-1]
-data_y = h_time[4_041:][1:]
+# time-series alignment
+data_x = h_time[:-1]
+data_y = h_time[1:]
 print(data_x.shape)
 print(data_y.shape)
 
@@ -78,7 +70,7 @@ model = jax.vmap(lambda p,x: darcyflow_fdm_periodic(x, k_crop, DT, DX, DY, p[0],
 loss_fn = lambda p,x,y: jnp.mean(jnp.pow(y - model(p, x), 2))
 print(params)
 
-# setup optimzer
+# setup optimizer
 optim = optax.sgd(ETA, momentum=RHO)
 state = optim.init(params)
 epoch_key = K0
@@ -117,21 +109,21 @@ for i in range(EPOCHS):
 		history['params'].append(params)
 		print(f"[Elapsed time: {time.time()-T0:.2f}s] epoch={i+1}, batch={j+1}, loss={batch_loss}, params={params}")
 
-# simulate
-#h_init = data_y[-1]
-#h_init = jnp.ones(k_crop.shape)
-h_init = jnp.array([[jnp.sin(jnp.pi*x)*jnp.sin(jnp.pi*y) for x in jnp.linspace(0, 1, k_crop.shape[1])] for y in jnp.linspace(0, 1, k_crop.shape[0])])
-h_sim = simulate_hydraulic_surface_fdm(h_init, k_crop, N_STEPS, DT, DX, DY, *params)
-print(f"Simulation completed.")
-print(f"[Elapsed time: {time.time()-T0:.2f}s]")
-
-# plot optimzer history
+# plot optimizer history
 plt.plot(history['loss'])
 plt.xlabel("Iteration")
 plt.ylabel("Loss")
 plt.text(0.99*n_batch*EPOCHS, 0.08*max(history['loss']), f"ss={params[0]:.6f}\n rr={params[1]:.6f}", c='r', ha='right')
 plt.grid()
 plt.show()
+
+# simulate
+#h_init = data_y[-1]
+h_init = jnp.ones(k_crop.shape)
+#h_init = jnp.array([[jnp.sin(jnp.pi*x)*jnp.sin(jnp.pi*y) for x in jnp.linspace(0, 1, k_crop.shape[1])] for y in jnp.linspace(0, 1, k_crop.shape[0])]) # central blob
+h_sim = simulate_hydraulic_surface_fdm(h_init, k_crop, N_STEPS, DT, DX, DY, *params)
+print(f"Simulation completed.")
+print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 # animate simulation
 animate_hydrology(

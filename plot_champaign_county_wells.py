@@ -22,8 +22,8 @@ PLOT_HYDRO = True
 PLOT_KSAT = False
 PLOT_3DSF = True
 
-VIDEO_SAVE = False
-VIDEO_FRAME_SKIP = 5000
+VIDEO_SAVE = True
+VIDEO_FRAME_SKIP = 0
 
 
 ### main
@@ -141,5 +141,5 @@ if PLOT_KSAT:
 
 # static 3d surface plot
 if PLOT_3DSF:
-	fig, axis = plot_surface3d(grid_x, grid_y, h_time[5140], k=k_crop)
+	fig, axis = plot_surface3d(grid_x, grid_y, h_time[5140-4042], k=k_crop)
 	plt.show()

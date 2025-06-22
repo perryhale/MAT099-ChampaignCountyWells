@@ -77,6 +77,7 @@ def animate_hydrology(
 			fps=frame_fps, 
 			progress_callback=lambda i, n: print(f"\33[2K\r[Frame: {i}/{n} ({100*i/n:.2f}%)]", end='')
 		)
+		plt.close()
 		print(f"\nSaved \"{save_path}\"")
 	else:
 		plt.show()
@@ -108,8 +109,6 @@ def plot_surface3d(grid_x, grid_y, grid_z, k=None, figsize=(5,5)):
 	ax.set_zlabel('Height (metres)', rotation=90)
 	ax.set_xticks([],[])
 	ax.set_yticks([],[])
-	plt.tight_layout()
-	plt.show()
 	
 	return fig, ax
 

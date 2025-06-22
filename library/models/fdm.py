@@ -27,32 +27,33 @@ def darcyflow_fdm_periodic(h, k, dt, dx, dy, ss, rr):
 	return next_h
 
 @jax.jit
-def darcyflow_fdm_neumann(h, k, dt, dx, dy, ss, rr, constraint_mask, constraint_values):
-    """
-    Solve 2D Darcy Flow PDE using explicit FDM with Neumann (zero-gradient) edge BCs.
-    Args:
-        h: jnp.array (nx, ny): Current hydraulic head
-        k: jnp.array (nx, ny): Hydraulic conductivity
-        dt, dx, dy: float: Discretization parameters
-        ss: float: Specific storage coefficient
-        rr: float: Recharge rate
-    Returns:
-        jnp.array (nx, ny): Updated hydraulic head
-    """
-    
+def darcyflow_fdm_neumann(h, k, dt, dx, dy, ss, rr):
+	"""
+	Solve 2D Darcy Flow PDE using explicit FDM with Neumann (zero-gradient) edge BCs
+	args:
+		h: jnp.array (nx, ny): Current hydraulic head
+		k: jnp.array (nx, ny): Hydraulic conductivity
+		dt, dx, dy: float: Discretization parameters
+		ss: float: Specific-storage coefficient
+		rr: float: Recharge rate
+	returns:
+		jnp.array (nx, ny): Next hydraulic head
+	"""
+	
 	# solve for next state
-    h_padded = jnp.pad(h, pad_width=1, mode='edge') # (nx+2, ny+2)
-    laplacian = (
-		(h_padded[2:, 1:-1] + h_padded[0:-2, 1:-1] - 2 * h) / dx**2 +
-		(h_padded[1:-1, 2:] + h_padded[1:-1, 0:-2] - 2 * h) / dy**2
+	h_padded = jnp.pad(h, pad_width=1, mode='edge') # (nx+2, ny+2)
+	laplacian = (
+		(h_padded[2:, 1:-1] + h_padded[0:-2, 1:-1] - 2*h) / dx**2 +
+		(h_padded[1:-1, 2:] + h_padded[1:-1, 0:-2] - 2*h) / dy**2
 	)
-    next_h = h + dt / ss * (k * laplacian + rr)
-    return next_h
+	next_h = h + dt / ss * (k * laplacian + rr)
+	return next_h
 
 # type: (jnp.array, float, float, float, float) -> float
 @jax.jit
 def cfl_value(k, dt, dx, dy, ss):
-	""" Courant–Friedrichs–Lewy simulatoin stability value, typically must be less than 1/4.
+	"""
+	Courant–Friedrichs–Lewy simulatoin stability value, typically must be less than 1/4.
 	arg: k: jnp.array: 2D array representing hydraulic conductivity
 	args: dt, dx, dy: float: Size of discretizations
 	arg: ss: float: Specific-storage coefficient
@@ -63,11 +64,11 @@ def cfl_value(k, dt, dx, dy, ss):
 # type: (jnp.array, jnp.array, jnp.array) -> jnp.array
 @jax.jit
 def apply_dirichlet_bc(h, constraint_mask, constraint_values):
-    next_h = jnp.where(constraint_mask, constraint_values, h)
+	next_h = jnp.where(constraint_mask, constraint_values, h)
 	return next_h
 
 # type: (jnp.array, jnp.array, int, float, float, float, float, float, List[(jnp.array)->jnp.array]) -> List[jnp.array]
-def simulate_hydraulic_surface_fdm(h, k, n_steps, dt, dx, dy, ss, rr, dirichlet_bcs="EDGE"):
+def simulate_hydraulic_surface_fdm(h, k, n_steps, dt, dx, dy, ss, rr, dirichlet_bcs="EDGE", solver=darcyflow_fdm_neumann):
 	
 	# assertions
 	assert h.shape == k.shape, f"ASSERT: Arrays h and k must have same shape: h.shape={h.shape}, k.shape={k.shape}."
@@ -75,7 +76,7 @@ def simulate_hydraulic_surface_fdm(h, k, n_steps, dt, dx, dy, ss, rr, dirichlet_
 	
 	# convenience feature
 	if dirichlet_bcs=="EDGE":
-		dbc_vals = jnp.zeros(h.shape, dtype='float')
+		dbc_vals = jnp.zeros(h.shape, dtype='float32')
 		dbc_mask = jnp.zeros(h.shape, dtype='bool')
 		dbc_mask = dbc_mask.at[0, :].set(True)
 		dbc_mask = dbc_mask.at[-1, :].set(True)
@@ -93,7 +94,7 @@ def simulate_hydraulic_surface_fdm(h, k, n_steps, dt, dx, dy, ss, rr, dirichlet_
 	state = h
 	h_sim = [h]
 	for t in tqdm(range(n_steps-1)):
-		state = darcyflow_fdm_periodic(state, k, dt, dx, dy, ss, rr)
+		state = solver(state, k, dt, dx, dy, ss, rr)
 		state = apply_dirichlet_bc(state, dbc_mask, dbc_vals)
 		h_sim.append(state)
 	

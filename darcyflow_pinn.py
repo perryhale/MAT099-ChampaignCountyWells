@@ -62,22 +62,11 @@ with jnp.load(I_CACHE) as data_interpolated:
 	print("Loaded cache")
 	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
-# rescale K
-k_crop = k_crop * K_SCALE
-print(f"K mean: {k_crop.mean()}")
-print(f"K var: {k_crop.var()}")
-print(f"[Elapsed time: {time.time()-T0:.2f}s]")
-
 # measure grid
 grid_shape = k_crop.shape
 grid_flat_size = jnp.prod(jnp.array(grid_shape))
 print(f"grid_shape={grid_shape}")
 print(f"grid_flat_size={grid_flat_size}")
-print(f"[Elapsed time: {time.time()-T0:.2f}s]")
-
-###! truncate data
-h_time = h_time[4_042:]
-print(f"Truncated length: {h_time.shape[0]}")
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 # partition data
@@ -116,7 +105,7 @@ print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 # initialise model
 params = [
 	*init_dense_neural_network(K0, [grid_flat_size, 1_500//4, 750//4, 1_500//4, grid_flat_size]),
-	[0.1, 0.0]
+	[0.1, 0.1]
 ]
 #pinn_model = jax.vmap(lambda p,x: jax.nn.sigmoid(dense_neural_network(p, x, a=jax.nn.tanh)), in_axes=(None, 0))
 pinn_model = jax.vmap(lambda p,x: dense_neural_network(p, x), in_axes=(None, 0))
@@ -255,3 +244,7 @@ print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 # plot 3d surface
 fig, axis = plot_surface3d(grid_x, grid_y, h_sim[-1], k=k_crop)
+plt.tight_layout()
+plt.show()
+print("Closed plot")
+print(f"[Elapsed time: {time.time()-T0:.2f}s]")

@@ -24,13 +24,13 @@ RNG_SEED = 999
 K0, K1 = jax.random.split(jax.random.key(RNG_SEED))
 
 # grid scale
-DX = 100_000 # cm
-DY = DX # cm
-DT = 24 # hr
+DX = 1000
+DY = DX
+DT = 24
 
 # simulation constants
-SS = 14e-3
-RR = 1e-2
+SS = 1.46e-1
+RR = 7.41e-5
 
 # optimizer
 EPOCHS = 5
@@ -49,14 +49,9 @@ with jnp.load(I_CACHE) as data_interpolated:
 	print(h_time.shape)
 	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
-# # rescale K
-# k_crop = k_crop * 24e-5 # km/day
-# print(k_scaled.mean())
-# print(k_scaled.var())
-
-# truncate+partition data
-data_x = h_time[4_041:][:-1]
-data_y = h_time[4_041:][1:]
+# time-series alignment
+data_x = h_time[:-1]
+data_y = h_time[1:]
 print(data_x.shape)
 print(data_y.shape)
 

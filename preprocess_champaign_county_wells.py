@@ -8,16 +8,11 @@ import pyproj
 from PIL import Image
 from tqdm import tqdm
 
-from library.data import (
-	crop_raster,
-	interp2d_ls,
-	interp2d_lrbf,
-	interp2d_gpr_rbf,
-	interp2d_ok
-)
+from library.data import *
+from library.models.fdm import *
 
 
-### parameters
+### Parameters
 
 # start timer
 T0 = time.time()
@@ -34,10 +29,37 @@ S_CACHE = "data/processed/data_surface.csv"
 I_CACHE = "data/processed/data_interpolated"
 
 
-### functions
+### Main section
 
-# type: (pd.DataFrame, pd.DataFrame) -> pd.DataFrame
-def filter_well_data(data_location, data_measure):
+# load data
+data_location = pd.read_csv(L_PATH)
+data_measure = pd.read_csv(M_PATH)
+print(data_location)
+print("Well#:", len(Counter(data_location['P_NUMBER'])))
+print(data_measure)
+print("Well#:", len(Counter(data_measure['P_Number']))) ###! only 18 wells in measurement data
+print(f"[Elapsed time: {time.time()-T0:.2f}s]")
+
+###! transform coordinates from NAD83 (EPSG:6319) to Conus Albers (EPSG:6350)
+transform_obj = pyproj.Transformer.from_crs("EPSG:6319", "EPSG:6350", always_xy=True)
+transform_fn = transform_obj.transform # type: (float, float) -> (float, float)
+
+# try cache
+try:
+	data_filtered_metric = pd.read_csv(M_CACHE)
+	data_surface = pd.read_csv(S_CACHE, index_col='TIMESTAMP')
+	data_surface.columns = data_surface.columns.astype('int32')
+	print("Found cache")
+	print(data_filtered_metric)
+	print(data_surface)
+	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
+
+# create data_filtered_metric, data_surface caches
+except FileNotFoundError as e:
+	print("Creating cache")
+	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
+	
+	# filter data
 	
 	# 1. Get ['P_Number', 'TIMESTAMP', 'DTW_FT_Reviewed'] columns from data_measure & establish dataframe length
 	data_filtered = pd.DataFrame()
@@ -57,42 +79,6 @@ def filter_well_data(data_location, data_measure):
 	data_filtered['UNIQUE_ID'] = data_filtered['P_NUMBER'] + data_filtered['TIMESTAMP']
 	data_filtered = data_filtered.groupby('UNIQUE_ID').mean().reset_index()
 	data_filtered = data_filtered.astype({'P_NUMBER':'int32', 'TIMESTAMP':'int32'})
-	
-	return data_filtered
-
-
-### main
-
-# load data
-data_location = pd.read_csv(L_PATH)
-data_measure = pd.read_csv(M_PATH)
-print(data_location)
-print("Well#:", len(Counter(data_location['P_NUMBER'])))
-print(data_measure)
-print("Well#:", len(Counter(data_measure['P_Number']))) ###! only 18 wells in measurement data
-print(f"[Elapsed time: {time.time()-T0:.2f}s]")
-
-###! transform coordinates from GIS NAD83 (EPSG:6319) to Conus Albers (EPSG:6350)
-transform_obj = pyproj.Transformer.from_crs("EPSG:6319", "EPSG:6350", always_xy=True)
-transform_fn = lambda lon, lat: transform_obj.transform(lon, lat) # type: (float, float) -> (float, float)
-
-# try cache
-try:
-	data_filtered_metric = pd.read_csv(M_CACHE)
-	data_surface = pd.read_csv(S_CACHE, index_col='TIMESTAMP')
-	data_surface.columns = data_surface.columns.astype('int32')
-	print("Found cache")
-	print(data_filtered_metric)
-	print(data_surface)
-	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
-
-# create data_filtered_metric, data_surface caches
-except FileNotFoundError as e:
-	print("Creating cache")
-	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
-	
-	# filter data
-	data_filtered = filter_well_data(data_location, data_measure)
 	print(data_filtered)
 	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 	
@@ -109,6 +95,11 @@ except FileNotFoundError as e:
 	print(data_surface)
 	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 	
+	###! truncate data_surface
+	data_surface = data_surface[4042:]
+	print(data_surface)
+	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
+	
 	# output CSVs
 	outputs = [
 		(data_filtered_metric, M_CACHE),
@@ -118,7 +109,7 @@ except FileNotFoundError as e:
 		df.to_csv(path)
 		print(f"Saved \"{path}\" [Elapsed time: {time.time()-T0:.2f}s]")
 
-# determine well and bounding area coordinates
+# determine well coordinates and bounding area
 data_location[['X_EPSG_6350','Y_EPSG_6350']] = data_location[['LONG_NAD_83', 'LAT_NAD_83']].apply(lambda row : pd.Series(transform_fn(*row)), axis=1)
 data_wells = data_location.set_index('P_NUMBER').loc[data_surface.columns][['X_EPSG_6350','Y_EPSG_6350']].to_numpy()
 data_bound_n = data_wells[:,1].max()
@@ -139,11 +130,76 @@ grid_x, grid_y = np.meshgrid(
 )
 
 ###! interpolate surface using linear simplex with constant boundary condition
-#h_time_const = data_surface.mean().mean() ###! using global mean will cause information leak
-#h_time = np.array([interp2d_ls(row, data_wells, grid_x, grid_y, const=h_time_const) for row in tqdm(data_surface.to_numpy(), desc="Grid interpolation")])
+#global_mean = data_surface.mean().mean() ###! using global mean down-task will cause information leak
+#h_time = np.array([interp2d_ls(row, data_wells, grid_x, grid_y, const=global_mean) for row in tqdm(data_surface.to_numpy(), desc="Interp")])
 
 ###! interpolate surface using linear RBF
-h_time = np.array([interp2d_lrbf(row, data_wells, grid_x, grid_y) for row in tqdm(data_surface.to_numpy(), desc="Grid interpolation")]) ###! [data_surface.to_numpy()[5140]]
+#h_time = np.array([interp2d_lrbf(row, data_wells, grid_x, grid_y) for row in tqdm(data_surface.to_numpy(), desc="Interp")]) ###! [data_surface.to_numpy()[5140]]
+
+###! interpolate surface using Dirichlet constrained FDM equilibrium
+import matplotlib.pyplot as plt
+from library.visualize import plot_surface3d
+solver = darcyflow_fdm_neumann
+grid_extent = (data_bound_w, data_bound_e, data_bound_n, data_bound_s)
+max_iter = 10_000
+dx = 1000
+dy = dx
+dt = 24
+ss = 1e-1#1.46e-1
+rr = 1e-7#7.41e-5
+def interpolate_fdm_constrained(solver, values, coords, grid_extent, grid_shape, max_iter, k, dt, dx, dy, ss, rr):
+	min_x, max_x, min_y, max_y = grid_extent
+	
+	# define boundary condition
+	dbc_mask = np.zeros(grid_shape, dtype='bool')
+	dbc_vals = np.zeros(grid_shape, dtype='float')
+	for (x,y),z in zip(coords, values):
+		y_idx = int((y - min_y) / (max_y - min_y) * (dbc_mask.shape[0]-1))
+		x_idx = int((x - min_x) / (max_x - min_x) * (dbc_mask.shape[1]-1))
+		dbc_mask[y_idx, x_idx] = True
+		dbc_vals[y_idx, x_idx] = z
+	
+	# iterate solver
+	grid_z = np.ones(grid_x.shape) * np.mean(values)#np.zeros(grid_x.shape)
+	for i in range(max_iter):
+	#for i in tqdm(range(max_iter)): ###! debug (tqdm)
+		grid_z = solver(grid_z, k, dt, dx, dy, ss, rr)
+		grid_z = apply_dirichlet_bc(grid_z, dbc_mask, dbc_vals)
+		###! debug
+		# if (i % 250 == 0):
+			# _ = plot_surface3d(grid_x, grid_y, grid_z, k=k)
+			# plt.tight_layout()
+			# plt.savefig(f"figures/{time.time()}.png")
+			# plt.close()
+			# plt.imshow(grid_z)
+			# plt.colorbar()
+			# plt.savefig(f"figures/{time.time()}.png")
+			# plt.close()
+	
+	###! debug
+	# _ = plot_surface3d(grid_x, grid_y, grid_z, k=k)
+	# plt.tight_layout()
+	# plt.savefig(f"figures/{time.time()}.png")
+	# plt.close()
+	# plt.imshow(grid_z)
+	# plt.colorbar()
+	# plt.savefig(f"figures/{time.time()}.png")
+	# plt.close()
+	
+	return grid_z
+
+###! rescale K
+#k_crop = k_crop # cm/hr
+#k_crop = k_crop * 24e-5 # km/day
+#k_crop = k_crop * 36e4**-1 # m/s
+k_crop = k_crop * 100 # m/hr
+#k_crop = np.ones(k_crop.shape) * 50 ###! constant K
+print(k_crop.mean())
+print(k_crop.var())
+
+h_time = np.array([
+	interpolate_fdm_constrained(solver, row, data_wells, grid_extent, grid_x.shape, max_iter, k_crop, dt, dx, dy, ss, rr) for row in tqdm(data_surface.to_numpy(), desc="Interp")
+])
 
 print(data_wells.shape)
 print(k_crop.shape)
