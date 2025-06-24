@@ -56,42 +56,12 @@ def dense_neural_network(params, x, a=jax.nn.sigmoid):
 	
 	return z
 
-def l1_norm(params):
-	"""
-	"""
-	if isinstance(params, jnp.ndarray):
-		return jnp.sum(jnp.abs(params))
-	elif isinstance(params, (list, tuple)):
-		return jnp.sum(jnp.array([l1_norm(item) for item in params]))
-	return 0
-
-###! NaN bug
-# def lp_norm(params, order=2):
-	# """
-	# # type: (List[Tuple[jnp.array]], int) -> float
-	# """
-	# # assertions
-	# assert order > 1, "Only l2+ norms."
-	
-	# # compute recursively
-	# if isinstance(params, jnp.ndarray):
-		# return jnp.linalg.norm(params, ord=order)
-	# elif isinstance(params, (list, tuple)):
-		# return jnp.power(jnp.sum(jnp.array([lp_norm(branch, order)**order for branch in params])), order**-1)
-	
-	# return 0.
-
-###! override lp_norm with non normalised version
 def lp_norm(p, order=2):
 	"""
 	# type: (List[Tuple[jnp.array]], int) -> float
 	"""
-	assert order > 1, "Use l1_norm"
-	if isinstance(p, jnp.ndarray):
-		return jnp.sum(jnp.power(p, order))
-	elif isinstance(p, (list, tuple)):
-		return jnp.sum(jnp.array([lp_norm(item) for item in p]))
-	return 0
+	assert order >= 1, "\"order\" must be greater than zero."
+	return jnp.sum(jnp.stack([jnp.sum(jnp.abs(leaf) ** order) for leaf in jax.tree_util.tree_leaves(p)])) ** (1.0 / order)
 
 def loss_cce(yh, y, e=1e-9):
 	"""

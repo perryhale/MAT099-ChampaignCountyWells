@@ -122,8 +122,17 @@ print("South:", data_bound_s)
 print("West:", data_bound_w)
 print("East:", data_bound_e)
 
-# crop k and interpolate h
+# crop and rescale k
 k_crop, k_crop_idx = crop_raster(K_PATH, "EPSG:6350", data_bound_w, data_bound_s, data_bound_e, data_bound_n)
+#k_crop = k_crop # cm/hr
+#k_crop = k_crop * 24e-5 # km/day
+#k_crop = k_crop * 36e4**-1 # m/s
+k_crop = k_crop * 100 # m/hr
+#k_crop = np.ones(k_crop.shape) * 50 ###! constant K
+print(k_crop.mean())
+print(k_crop.var())
+
+# interpolate h time
 grid_x, grid_y = np.meshgrid(
 	np.linspace(data_bound_w, data_bound_e, k_crop.shape[1]),
 	np.linspace(data_bound_n, data_bound_s, k_crop.shape[0])
@@ -134,72 +143,63 @@ grid_x, grid_y = np.meshgrid(
 #h_time = np.array([interp2d_ls(row, data_wells, grid_x, grid_y, const=global_mean) for row in tqdm(data_surface.to_numpy(), desc="Interp")])
 
 ###! interpolate surface using linear RBF
-#h_time = np.array([interp2d_lrbf(row, data_wells, grid_x, grid_y) for row in tqdm(data_surface.to_numpy(), desc="Interp")]) ###! [data_surface.to_numpy()[5140]]
+h_time = np.array([interp2d_lrbf(row, data_wells, grid_x, grid_y) for row in tqdm(data_surface.to_numpy(), desc="Interp")])
 
 ###! interpolate surface using Dirichlet constrained FDM equilibrium
-import matplotlib.pyplot as plt
-from library.visualize import plot_surface3d
-solver = darcyflow_fdm_neumann
-grid_extent = (data_bound_w, data_bound_e, data_bound_n, data_bound_s)
-max_iter = 10_000
-dx = 1000
-dy = dx
-dt = 24
-ss = 1e-1#1.46e-1
-rr = 1e-7#7.41e-5
-def interpolate_fdm_constrained(solver, values, coords, grid_extent, grid_shape, max_iter, k, dt, dx, dy, ss, rr):
-	min_x, max_x, min_y, max_y = grid_extent
+# import matplotlib.pyplot as plt
+# from library.visualize import plot_surface3d
+# solver = darcyflow_fdm_neumann
+# grid_extent = (data_bound_w, data_bound_e, data_bound_n, data_bound_s)
+# max_iter = 10_000
+# dx = 1000
+# dy = dx
+# dt = 24
+# ss = 1e-1#1.46e-1
+# rr = 1e-7#7.41e-5
+# def interpolate_fdm_constrained(solver, values, coords, grid_extent, grid_shape, max_iter, k, dt, dx, dy, ss, rr):
+	# min_x, max_x, min_y, max_y = grid_extent
 	
-	# define boundary condition
-	dbc_mask = np.zeros(grid_shape, dtype='bool')
-	dbc_vals = np.zeros(grid_shape, dtype='float')
-	for (x,y),z in zip(coords, values):
-		y_idx = int((y - min_y) / (max_y - min_y) * (dbc_mask.shape[0]-1))
-		x_idx = int((x - min_x) / (max_x - min_x) * (dbc_mask.shape[1]-1))
-		dbc_mask[y_idx, x_idx] = True
-		dbc_vals[y_idx, x_idx] = z
+	# # define boundary condition
+	# dbc_mask = np.zeros(grid_shape, dtype='bool')
+	# dbc_vals = np.zeros(grid_shape, dtype='float')
+	# for (x,y),z in zip(coords, values):
+		# y_idx = int((y - min_y) / (max_y - min_y) * (dbc_mask.shape[0]-1))
+		# x_idx = int((x - min_x) / (max_x - min_x) * (dbc_mask.shape[1]-1))
+		# dbc_mask[y_idx, x_idx] = True
+		# dbc_vals[y_idx, x_idx] = z
 	
-	# iterate solver
-	grid_z = np.ones(grid_x.shape) * np.mean(values)#np.zeros(grid_x.shape)
-	for i in range(max_iter):
-	#for i in tqdm(range(max_iter)): ###! debug (tqdm)
-		grid_z = solver(grid_z, k, dt, dx, dy, ss, rr)
-		grid_z = apply_dirichlet_bc(grid_z, dbc_mask, dbc_vals)
-		###! debug
-		# if (i % 250 == 0):
-			# _ = plot_surface3d(grid_x, grid_y, grid_z, k=k)
-			# plt.tight_layout()
-			# plt.savefig(f"figures/{time.time()}.png")
-			# plt.close()
-			# plt.imshow(grid_z)
-			# plt.colorbar()
-			# plt.savefig(f"figures/{time.time()}.png")
-			# plt.close()
+	# # iterate solver
+	# grid_z = np.ones(grid_x.shape) * np.mean(values)#np.zeros(grid_x.shape)
+	# for i in range(max_iter):
+	# #for i in tqdm(range(max_iter)): ###! debug (tqdm)
+		# grid_z = solver(grid_z, k, dt, dx, dy, ss, rr)
+		# grid_z = apply_dirichlet_bc(grid_z, dbc_mask, dbc_vals)
+		# ###! debug
+		# # if (i % 250 == 0):
+			# # _ = plot_surface3d(grid_x, grid_y, grid_z, k=k)
+			# # plt.tight_layout()
+			# # plt.savefig(f"figures/{time.time()}.png")
+			# # plt.close()
+			# # plt.imshow(grid_z)
+			# # plt.colorbar()
+			# # plt.savefig(f"figures/{time.time()}.png")
+			# # plt.close()
 	
-	###! debug
-	# _ = plot_surface3d(grid_x, grid_y, grid_z, k=k)
-	# plt.tight_layout()
-	# plt.savefig(f"figures/{time.time()}.png")
-	# plt.close()
-	# plt.imshow(grid_z)
-	# plt.colorbar()
-	# plt.savefig(f"figures/{time.time()}.png")
-	# plt.close()
+	# ###! debug
+	# # _ = plot_surface3d(grid_x, grid_y, grid_z, k=k)
+	# # plt.tight_layout()
+	# # plt.savefig(f"figures/{time.time()}.png")
+	# # plt.close()
+	# # plt.imshow(grid_z)
+	# # plt.colorbar()
+	# # plt.savefig(f"figures/{time.time()}.png")
+	# # plt.close()
 	
-	return grid_z
+	# return grid_z
 
-###! rescale K
-#k_crop = k_crop # cm/hr
-#k_crop = k_crop * 24e-5 # km/day
-#k_crop = k_crop * 36e4**-1 # m/s
-k_crop = k_crop * 100 # m/hr
-#k_crop = np.ones(k_crop.shape) * 50 ###! constant K
-print(k_crop.mean())
-print(k_crop.var())
-
-h_time = np.array([
-	interpolate_fdm_constrained(solver, row, data_wells, grid_extent, grid_x.shape, max_iter, k_crop, dt, dx, dy, ss, rr) for row in tqdm(data_surface.to_numpy(), desc="Interp")
-])
+# h_time = np.array([
+	# interpolate_fdm_constrained(solver, row, data_wells, grid_extent, grid_x.shape, max_iter, k_crop, dt, dx, dy, ss, rr) for row in tqdm(data_surface.to_numpy(), desc="Interp")
+# ])
 
 print(data_wells.shape)
 print(k_crop.shape)
