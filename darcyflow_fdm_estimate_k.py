@@ -17,7 +17,7 @@ T0 = time.time()
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 # cache path
-I_CACHE = 'data/processed/data_interpolated.npz'
+I_CACHE = 'cache/data_interpolated.npz'
 
 # RNG setup
 RNG_SEED = 999

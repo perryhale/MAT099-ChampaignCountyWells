@@ -14,7 +14,7 @@ print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 # input paths
 K_PATH = 'data/SaturatedHydraulicConductivity_1km/KSat_Arithmetic_1km.tif'
-I_CACHE = 'data/processed/data_interpolated.npz'
+I_CACHE = 'cache/data_interpolated.npz'
 
 # plotting arguments
 PLOT_DEBUG = False

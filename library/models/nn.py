@@ -18,7 +18,7 @@ def init_glorot_uniform(key, shape, fan_in, fan_out):
 
 def init_dense_neural_network(key, layers):
 	"""
-	# type: (int, List[int]) -> List[Tuple[jnp.array]]
+	# type: (int, List[int]) -> List[Tuple[jnp.array, jnp.array]]
 	"""
 	
 	# split key
@@ -26,29 +26,29 @@ def init_dense_neural_network(key, layers):
 	
 	# initialise input layer
 	w_list = [init_glorot_uniform(k0, (layers[1], layers[0]), layers[0], layers[1])]
-	b_list = [jnp.zeros((layers[1],))]
+	b_list = [jnp.zeros((layers[1], 1))]
 	
 	# initialise hidden layers
 	for i in range(1, len(layers)-1):
 		k1, key = jax.random.split(key)
 		w_list.append(init_glorot_uniform(k1, (layers[i+1], layers[i]), layers[i], layers[i+1]))
-		b_list.append(jnp.zeros((layers[i+1], )))
+		b_list.append(jnp.zeros((layers[i+1], 1)))
 	
 	return list(map(tuple, zip(w_list, b_list)))
 
-def dense_neural_network(params, x, a=jax.nn.sigmoid):
+def dense_neural_network(params, x, ha=jax.nn.sigmoid):
 	"""
 	# type: (List[Tuple[jnp.array]], jnp.array, jax.nn.[Activation functions]) -> jnp.array
-	# x inR (in, )
-	# z inR (out, )
+	# x inR (in, 1)
+	# z inR (out, 1)
 	"""
 	
-	# input activation
-	h = x
+	# shape-safe input activation
+	h = x.reshape(-1, 1)
 	
 	# hidden activations
 	for w,b in params[:-1]:
-		h = a(jnp.dot(w, h) + b)
+		h = ha(jnp.dot(w, h) + b)
 	
 	# output activation
 	wn, bn = params[-1]
@@ -77,7 +77,7 @@ def loss_mse(yh, y):
 	# yh, y inR (*, out)
 	# loss inR
 	"""
-	return jnp.mean(jnp.pow(yh - y, 2))
+	return jnp.mean((yh-y)**2)
 
 def accuracy_score(yh, y):
 	"""	

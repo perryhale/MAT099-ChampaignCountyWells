@@ -19,7 +19,7 @@ T0 = time.time()
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 # cache path
-I_CACHE = 'data/processed/data_interpolated.npz'
+I_CACHE = 'cache/data_interpolated.npz'
 
 # RNG setup
 RNG_SEED = 999
@@ -107,7 +107,6 @@ params = [
 	*init_dense_neural_network(K0, [grid_flat_size, 1_500//4, 750//4, 1_500//4, grid_flat_size]),
 	[0.1, 0.1]
 ]
-#pinn_model = jax.vmap(lambda p,x: jax.nn.sigmoid(dense_neural_network(p, x, a=jax.nn.tanh)), in_axes=(None, 0))
 pinn_model = jax.vmap(lambda p,x: dense_neural_network(p, x), in_axes=(None, 0))
 fdm_model = jax.vmap(darcyflow_fdm_periodic, in_axes=[0]+6*[None])
 

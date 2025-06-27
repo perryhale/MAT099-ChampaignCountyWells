@@ -1,5 +1,6 @@
 import time
 import math
+import pickle ###!
 
 import jax
 import jax.numpy as jnp
@@ -22,15 +23,16 @@ T0 = time.time()
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 # cache path
-I_CACHE = 'data/processed/data_interpolated.npz'
-S_CACHE = 'data/processed/data_surface.csv'
+I_CACHE = 'cache/data_interpolated.npz'
+S_CACHE = 'cache/data_surface.csv'
+W_CACHE = 'cache/df_rpinn.pkl'
 
 # RNG setup
 RNG_SEED = 999
 K0, K1, K2 = jax.random.split(jax.random.key(RNG_SEED), 3)
 
 # data partitions
-EPOCHS = 15
+EPOCHS = 4
 BATCH_SIZE = 64
 PART_TRAIN = 0.75
 PART_VAL = 0.05
@@ -46,21 +48,21 @@ LAM_L2 = 0.25
 SS = 1e-1
 RR = 1e-7
 
-# plotting
-VIDEO_FRAME_SKIP = 0
-VIDEO_SAVE = False
-
 
 ### main
 
 # load cache
-with jnp.load(I_CACHE) as data_interpolated:
-	k_crop = data_interpolated['k_crop']
-	data_wells = data_interpolated['data_wells']
-	print("Loaded cache")
+with jnp.load(I_CACHE) as i_cache:
+	k_crop = i_cache['k_crop']
+	data_wells = i_cache['data_wells']
+	grid_x = i_cache['grid_x']
+	grid_y = i_cache['grid_y']
+	print(f"Loaded \"{I_CACHE}\"")
 	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 data_surface = pd.read_csv(S_CACHE).to_numpy()
+print(f"Loaded \"{S_CACHE}\"")
+print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 # populate xyt->z
 data_points = []
@@ -100,8 +102,6 @@ test_steps = math.ceil(test_x.shape[0] / BATCH_SIZE)
 del n_data
 del shuffle_idx
 del data_points
-del data_surface
-del data_wells
 del data_train
 del data_val
 del data_test
@@ -114,88 +114,106 @@ print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 # initialise model
 h_param = init_dense_neural_network(K0, [3, 32, 32, 32, 1])
-rr_param = init_dense_neural_network(K1, [3, 32, 32, 32, 1])
-h_fn = lambda p,xyt: jax.nn.sigmoid(dense_neural_network(p, xyt, a=jax.nn.tanh)) # [0,1]x[0,1]x[0,1] -> [0,1]
+h_fn = jax.vmap(lambda p,xyt: dense_neural_network(p, xyt, ha=jax.nn.tanh)[0,0], in_axes=(None, 0)) # Nx[0,1]x[0,1]x[0,1] -> [0,1]
 k_fn = lambda xy: jax.lax.dynamic_slice(k_crop, (jnp.floor(xy[1] * k_crop.shape[0]-1).astype(jnp.int32), jnp.floor(xy[0] * k_crop.shape[1]-1).astype(jnp.int32)), (1, 1))[0, 0] # [0,1]x[0,1] -> R
-#rr_fn = lambda p,xyt: RR # [0,1]x[0,1]x[0,1] -> R
-rr_fn = lambda p,xyt: dense_neural_network(p, xyt, a=jax.nn.tanh)#RR # [0,1]x[0,1]x[0,1] -> R
+# rr_param = init_dense_neural_network(K0, [3, 32, 32, 32, 1])
+# rr_fn = h_fn
 
 def loss_3dgwf(params, batch_xyt):
 	
 	# setup
-	h_fn_ = lambda xyt_: h_fn(params[0], xyt_)[0]
+	h_fn_ = lambda xyt: h_fn(params[0], xyt[jnp.newaxis, :])[0]
 	flux_fn = lambda xyt: k_fn(xyt[:2]) * jax.grad(h_fn_)(xyt)[:2] # ∇h = (∂h/∂x, ∂h/∂y)
 	
 	# compute 3d groundwater flow terms
 	batch_dhdt = jax.vmap(lambda xyt: jax.grad(h_fn_)(xyt)[2])(batch_xyt)
 	batch_div_flux = jax.vmap(lambda xyt: jnp.trace(jax.jacfwd(flux_fn)(xyt)))(batch_xyt)
-	batch_rr = jax.vmap(rr_fn, in_axes=(None, 0))(params[1], batch_xyt)
 	
 	# return l2 of residual
-	residual = SS * batch_dhdt - batch_div_flux - batch_rr # Ss * ∂h/∂t - ∇·(K ∇h) - Rr
+	residual = SS * batch_dhdt - batch_div_flux - RR # Ss * ∂h/∂t - ∇·(K ∇h) - Rr
 	loss = jnp.mean(residual**2)
 	
 	return loss
 
 def loss_fn(params, batch_xyt, batch_z):
-	batch_zh = jax.vmap(lambda xyt: h_fn(params[0], xyt))(batch_xyt)
-	loss = LAM_MSE*loss_mse(batch_zh, batch_z) + LAM_PHYS*loss_3dgwf(params, batch_xyt) + LAM_L2*lp_norm(params, order=2)
+	loss = LAM_MSE*loss_mse(h_fn(params[0], batch_xyt), batch_z) + LAM_PHYS*loss_3dgwf(params, batch_xyt) + LAM_L2*lp_norm(params, order=2)
 	return loss
 
-# setup optimiser
-params = [h_param, rr_param]
-optim = optax.adamw(ETA)
-state = optim.init(params)
-history = {'batch_l2':[], 'batch_loss':[], 'train_loss':[], 'val_loss':[], 'test_loss':[]}
-print(f"history_keys={list(history.keys())}")
-print(f"[Elapsed time: {time.time()-T0:.2f}s]")
+# try cache
+try:
+	with open(W_CACHE, 'rb') as f:
+		w_cache = pickle.load(f)
+		history = w_cache['history']
+		params = w_cache['params']
+		h_param = params[0]
+		print(f"Loaded \"{W_CACHE}\"")
+		print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
-@jax.jit
-def optimizer_step(s, p, x, y):
-	loss, grad = jax.value_and_grad(loss_fn)(p, x, y)
-	updates, next_state = optim.update(grad, s, p)
-	next_params = optax.apply_updates(p, updates)
-	return loss, next_state, next_params
-
-# fit model
-batch_key = K2
-for i in range(EPOCHS):
+except Exception as e:
 	
-	# setup data generators
-	batch_key = jax.random.split(batch_key, 1)[0]
-	train_generator = batch_generator(train_x, train_y, BATCH_SIZE, shuffle_key=batch_key)
-	val_generator = batch_generator(val_x, val_y, BATCH_SIZE)
+	# setup optimiser
+	params = [h_param]
+	optim = optax.adamw(ETA)
+	state = optim.init(params)
+	epoch_key = K2
+	history = {'batch_loss':[], 'train_loss':[], 'val_loss':[], 'test_loss':[]}
+	print(f"history_keys={list(history.keys())}")
+	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 	
-	# iterate optimiser
-	train_loss = 0.
-	for j in range(train_steps):
+	@jax.jit
+	def optimizer_step(s, p, x, y):
+		loss, grad = jax.value_and_grad(loss_fn)(p, x, y)
+		updates, next_state = optim.update(grad, s, p)
+		next_params = optax.apply_updates(p, updates)
+		return loss, next_state, next_params
+	
+	# fit model
+	for i in range(EPOCHS):
 		
-		# batch loss and update
-		batch_loss, state, params = optimizer_step(state, params, *next(train_generator))
-		train_loss += batch_loss / train_steps
+		# setup data generators
+		epoch_key = jax.random.split(epoch_key, 1)[0]
+		train_generator = batch_generator(train_x, train_y, BATCH_SIZE, shuffle_key=epoch_key)
+		val_generator = batch_generator(val_x, val_y, BATCH_SIZE)
+		
+		# iterate optimiser
+		train_loss = 0.
+		for j in range(train_steps):
+			
+			# batch loss and update
+			batch_loss, state, params = optimizer_step(state, params, *next(train_generator))
+			train_loss += batch_loss / train_steps
+			
+			# record/trace
+			history['batch_loss'].append(batch_loss)
+			#print(f"[Elapsed time: {time.time()-T0:.2f}s] epoch={i+1}, batch={j+1}, batch_loss={batch_loss:.4f}")
+		
+		# validation loss
+		val_loss = 0.
+		for _ in range(val_steps):
+			val_loss += loss_fn(params, *next(val_generator)) / val_steps
 		
 		# record/trace
-		history['batch_loss'].append(batch_loss)
-		#print(f"[Elapsed time: {time.time()-T0:.2f}s] epoch={i+1}, batch={j+1}, batch_loss={batch_loss:.4f}")
+		history['train_loss'].append(train_loss)
+		history['val_loss'].append(val_loss)
+		print(f"[Elapsed time: {time.time()-T0:.2f}s] epoch={i+1}, train_loss={train_loss:.4f}, val_loss={val_loss:.4f}")
 	
-	# validation loss
-	val_loss = 0.
-	for _ in range(val_steps):
-		val_loss += loss_fn(params, *next(val_generator)) / val_steps
+	# compute test loss
+	test_generator = batch_generator(test_x, test_y, BATCH_SIZE)
+	test_loss = 0.
+	for _ in range(test_steps):
+		test_loss += loss_fn(params, *next(test_generator)) / test_steps
 	
-	# record/trace
-	history['train_loss'].append(train_loss)
-	history['val_loss'].append(val_loss)
-	print(f"[Elapsed time: {time.time()-T0:.2f}s] epoch={i+1}, train_loss={train_loss:.4f}, val_loss={val_loss:.4f}")
-
-# compute test loss
-test_generator = batch_generator(test_x, test_y, BATCH_SIZE)
-test_loss = 0.
-for _ in range(test_steps):
-	test_loss += loss_fn(params, *next(test_generator)) / test_steps
-
-# record test statistics
-history['test_loss'] = test_loss
+	# record test statistics
+	history['test_loss'] = test_loss
+	
+	# create cache
+	with open(W_CACHE, 'wb') as f:
+		pickle.dump(dict(
+			params=params,
+			history=history
+		), f)
+	print(f"Saved \"{W_CACHE}\"")
+	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 # plot history
 plt.plot(range(train_steps*EPOCHS), history['batch_loss'], label="Batch", c='purple')
@@ -208,60 +226,27 @@ plt.ylabel("Loss")
 plt.grid()
 plt.show()
 
+# plot surface
+axis_x = jnp.linspace(0, 1, k_crop.shape[1])
+axis_y = jnp.linspace(0, 1, k_crop.shape[0])
+axis_t = jnp.linspace(0, 1, 100)
+h_sim = h_fn(params[0], jnp.array(jnp.meshgrid(axis_x, axis_y, axis_t)).T.reshape(-1, 3)).T.reshape(axis_t.shape[0], axis_y.shape[0], axis_x.shape[0])
+print(h_sim.shape)
 
-
-
-
-
-import sys;sys.exit()
-
-
-
-
-
-### Autoregressive simulation
-
-# simulate
-#h_init = jnp.ones(k_crop.shape)
-#h_init = jnp.array([[jnp.sin(jnp.pi*x)*jnp.sin(jnp.pi*y) for x in jnp.linspace(0, 1, k_crop.shape[1])] for y in jnp.linspace(0, 1, k_crop.shape[0])])
-state = test_x[0]
-h_sim = [state]
-for _ in tqdm(range(len(test_x))):
-	state = pinn_model(params[:-1], state.reshape((1, grid_flat_size, ))).reshape((grid_shape))
-	#state = apply_edge_boundary_conditions(state)
-	h_sim.append(state)
-h_sim = jnp.array(h_sim)
-h_sim = h_sim*data_train_range+data_train_min
-print(f"Simulation completed.")
-print(f"[Elapsed time: {time.time()-T0:.2f}s]")
-
-# compute/plot simulation statistics
-h_sim_mean = [h.mean() for h in h_sim[1:]]
-h_sim_var = [h.var() for h in h_sim[1:]]
-h_sim_rmse = [loss_mse(yh, y)**0.5 for yh,y in zip(h_sim[1:], test_y)]
-plt.plot(h_sim_mean, label="Mean")
-plt.plot(h_sim_var, label="Var")
-plt.plot(h_sim_rmse, label="RMSE")
-plt.legend()
-plt.grid()
-plt.xlabel("Time (days)")
-plt.ylabel("Height (metres)")
+fig, ax = plt.subplots(figsize=(5, 5))
+ax_contour = ax.contour(h_sim[50], levels=10, cmap='binary_r')
+ax_clabel = ax.clabel(ax_contour, inline=True, fontsize=8, colors='red')
+ax.grid()
+ax.set_xticks([],[])
+ax.set_yticks([],[])
+plt.tight_layout()
 plt.show()
 
-# animate simulation
+plot_surface3d(*jnp.meshgrid(axis_x, axis_y), h_sim[50])
+plt.show()
+
 animate_hydrology(
 	h_sim,
 	k=k_crop,
-	axis_ticks=True,
-	frame_skip=VIDEO_FRAME_SKIP,
-	save_path=__file__.replace('.py','.mp4') if VIDEO_SAVE else None
+	cmap_contour='binary'
 )
-print("Closed plot")
-print(f"[Elapsed time: {time.time()-T0:.2f}s]")
-
-# plot 3d surface
-fig, axis = plot_surface3d(grid_x, grid_y, h_sim[-1], k=k_crop)
-plt.tight_layout()
-plt.show()
-print("Closed plot")
-print(f"[Elapsed time: {time.time()-T0:.2f}s]")

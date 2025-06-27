@@ -24,9 +24,9 @@ L_PATH = 'data/champaign_county_wells/OB_LOCATIONS.csv'
 M_PATH = 'data/champaign_county_wells/OB_WELL_MEASUREMENTS_Champaign_County.csv'
 
 # output paths
-M_CACHE = "data/processed/data_filtered_metric.csv"
-S_CACHE = "data/processed/data_surface.csv"
-I_CACHE = "data/processed/data_interpolated"
+M_CACHE = "cache/data_filtered_metric.csv"
+S_CACHE = "cache/data_surface.csv"
+I_CACHE = "cache/data_interpolated"
 
 
 ### Main section

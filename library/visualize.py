@@ -47,7 +47,7 @@ def animate_hydrology(
 		
 		# draw h
 		h_contour = ax.contour(h_time[t], levels=contour_levels, cmap=cmap_contour, extent=grid_extent, origin='upper' if (grid_extent is not None) else None)
-		h_contour_labels = ax.clabel(h_contour, inline=True, fontsize=8, colors='r')
+		h_contour_labels = ax.clabel(h_contour, inline=True, fontsize=8, colors='red')
 		#for label in h_contour_labels:
 		#	label.set_bbox(dict(facecolor='white', edgecolor='white', boxstyle='square,pad=0.1'))
 		
