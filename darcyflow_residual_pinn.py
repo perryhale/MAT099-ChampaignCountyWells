@@ -48,6 +48,17 @@ LAM_L2 = 0.1
 SS = 1e-4
 RR = 1e-7
 
+# sampling
+SAMPLE_XMIN = -2
+SAMPLE_XMAX = +3
+SAMPLE_XRES = 0 ###! 0 -> inherit k shape
+SAMPLE_YMIN = -2
+SAMPLE_YMAX = +3
+SAMPLE_YRES = 0 ###! 0 -> inherit k shape
+SAMPLE_TMIN = 0
+SAMPLE_TMAX = 2
+SAMPLE_TRES = 400
+
 
 ### main
 
@@ -66,7 +77,7 @@ print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 data_points = []
 for i in range(0, data_surface.shape[0]-1, 1):
 	for j in range(0, data_surface.shape[1]-1, 1):
-		xytz = (*data_wells[j], i, data_surface[i][j+1]) # xytz
+		xytz = (*data_wells[j], data_surface[i][0], data_surface[i][j+1]) # xytz
 		data_points.append(xytz)
 
 data_points = jnp.array(data_points)
@@ -222,9 +233,9 @@ except Exception as e:
 	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 	
 	# sample surface
-	axis_x = jnp.linspace(-2, 3, k_crop.shape[1])
-	axis_y = jnp.linspace(-2, 3, k_crop.shape[0])
-	axis_t = jnp.linspace(0, 2, 200)
+	axis_x = jnp.linspace(SAMPLE_XMIN, SAMPLE_XMAX, k_crop.shape[1] if (SAMPLE_XRES==0) else SAMPLE_XRES)
+	axis_y = jnp.linspace(SAMPLE_YMIN, SAMPLE_YMAX, k_crop.shape[0] if (SAMPLE_YRES==0) else SAMPLE_YRES)
+	axis_t = jnp.linspace(SAMPLE_TMIN, SAMPLE_TMAX, SAMPLE_TRES)
 	h_sim = h_fn(params[0], jnp.stack(jnp.meshgrid(axis_t, axis_y, axis_x, indexing='ij')[::-1], axis=-1).reshape(-1, 3))
 	h_sim = data_scaler.data_min_[3] + h_sim * data_scaler.data_range_[3]
 	h_sim = h_sim.reshape(len(axis_t), len(axis_y), len(axis_x))
@@ -289,6 +300,7 @@ while True:
 print("Closed plot")
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
+data_scatter = (data_wells - data_scaler.data_min_[:2]) / data_scaler.data_range_[:2]
 animate_hydrology(
 	h_sim,
 	k=k_crop,
@@ -298,7 +310,9 @@ animate_hydrology(
 	cmap_contour='binary',
 	axis_ticks=True,
 	origin=None,
-	isolines=25
+	isolines=25,
+	scatter_data=data_scatter.T,
+	save_path="DFRPINN_EXTRAPOLATED_SURFACE_250629.webm"
 )
 print("Closed plot")
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")
