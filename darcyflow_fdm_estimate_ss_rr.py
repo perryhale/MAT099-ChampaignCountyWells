@@ -12,7 +12,7 @@ from library.models.fdm import (
 	cfl_value,
 	simulate_hydraulic_surface_fdm
 )
-from library.visualize import animate_hydrology
+from library.visual import animate_hydrology
 
 
 ### setup

@@ -85,28 +85,28 @@ def animate_hydrology(
 	return None
 
 # type: (jnp.array, jnp.array, jnp.array, jnp.array, tuple[int, int]) -> tuple[Figure, Axes]
-def plot_surface3d(grid_x, grid_y, grid_z, k=None, figsize=(5,5)):
+def plot_surface3d(grid_x, grid_y, grid_z, k=None, figsize=(5,5), sfc_cmap='prism', cnt_cmap='Oranges', xlabel='X_EPSG_6350', ylabel='Y_EPSG_6350', zlabel='Height (metres)'):
 	
 	# init figure
 	fig = plt.figure(figsize=figsize)
 	ax = fig.add_subplot(111, projection='3d')
 	
 	# plot surface and contours
-	ax.plot_surface(grid_x, grid_y, grid_z, cmap='prism', alpha=0.8, linewidth=0)
+	ax.plot_surface(grid_x, grid_y, grid_z, cmap=sfc_cmap, alpha=0.8, linewidth=0)
 	contours = ax.contour(
 		grid_x, grid_y, grid_z,
 		zdir='z',
-		offset=np.min(grid_z)-1,
+		offset=np.min(grid_z)-0.1*(np.max(grid_z)-np.min(grid_z)),
 		levels=10,
-		cmap='Oranges'
+		cmap=cnt_cmap
 	)
 	if k is not None:
 		ax.plot_surface(grid_x, grid_y, np.ones(grid_z.shape)*np.min(grid_z)-2, facecolors=plt.cm.BrBG(k/k.max()), shade=False)
 	
 	ax.view_init(elev=20, azim=270)
-	ax.set_xlabel('X_EPSG_6350')
-	ax.set_ylabel('Y_EPSG_6350')
-	ax.set_zlabel('Height (metres)', rotation=90)
+	ax.set_xlabel(xlabel)
+	ax.set_ylabel(ylabel)
+	ax.set_zlabel(zlabel)
 	ax.set_xticks([],[])
 	ax.set_yticks([],[])
 	

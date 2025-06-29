@@ -1,8 +1,7 @@
-import numpy as np
 import jax
 import jax.numpy as jnp
+import numpy as np
 from scipy import interpolate
-from sklearn import gaussian_process
 
 import rasterio
 from rasterio.mask import mask
@@ -10,9 +9,9 @@ from rasterio.warp import transform_bounds
 from shapely.geometry import box, mapping
 
 
-### interpolation
+### Interpolation
 
-# type: (np.ndarray, np.ndarray, np.ndarray, np.ndarray, float) -> np.ndarray
+# Type: (np.ndarray, np.ndarray, np.ndarray, np.ndarray, float) -> np.ndarray
 def interp2d_ls(values, coords, grid_x, grid_y, const=None):
 	
 	grid_z = interpolate.griddata(coords, values, (grid_x, grid_y), method='linear')
@@ -20,7 +19,7 @@ def interp2d_ls(values, coords, grid_x, grid_y, const=None):
 	
 	return grid_z
 
-# type: (np.ndarray, np.ndarray, np.ndarray, np.ndarray) -> np.ndarray
+# Type: (np.ndarray, np.ndarray, np.ndarray, np.ndarray) -> np.ndarray
 def interp2d_lrbf(values, coords, grid_x, grid_y):
 	
 	grid_flat = np.column_stack([grid_x.ravel(), grid_y.ravel()]) # (n, 2)
@@ -29,65 +28,22 @@ def interp2d_lrbf(values, coords, grid_x, grid_y):
 	
 	return grid_z
 
-# type: (np.ndarray, np.ndarray, np.ndarray, np.ndarray) -> np.ndarray
-def interp2d_gpr_rbf(values, coords, grid_x, grid_y):
-	
-	# values_mean = values.mean()
-	# values_std = values.std()
-	# values = (values - values_mean) / values_std
-	
-	#kernel = 1 * gaussian_process.kernels.RBF(length_scale=100.0, length_scale_bounds=(1e-2, 1e2))
-	gpr = gaussian_process.GaussianProcessRegressor()
-	gpr.fit(coords, values)
-	
-	grid_flat = np.column_stack([grid_x.ravel(), grid_y.ravel()])
-	grid_z = gpr.predict(grid_flat).reshape(grid_x.shape)
-	
-	# grid_z = grid_z * values_std + values_mean
-	
-	return grid_z
 
+### Cropping and sampling
 
-from pykrige.ok import OrdinaryKriging
-
-def interp2d_ok(values, coords, grid_x, grid_y):
-	
-	ordinary_kriging = OrdinaryKriging(
-		coords[:,0],
-		coords[:,1],
-		values,
-		variogram_model='linear',
-		verbose=True
-	)
-	grid_z, ss = ordinary_kriging.execute('grid', np.linspace(grid_x.min(), grid_x.max(), grid_x.shape[1]), np.linspace(grid_y.max(), grid_y.min(), grid_y.shape[0]))
-	
-	import matplotlib.pyplot as plt
-	
-	fig = plt.figure(figsize=(5, 5))
-	ax = fig.add_subplot(111, projection='3d')
-	ax.plot_surface(grid_x, grid_y, grid_z, cmap='prism', alpha=0.8, linewidth=0)
-	contours = ax.contour(
-		grid_x, grid_y, grid_z,
-		zdir='z',
-		offset=np.min(grid_z)-1,
-		levels=10,
-		cmap='Oranges'
-	)
-	ax.clabel(contours, fmt='%1.1f', colors='black', fontsize=8)
-	ax.view_init(elev=20, azim=270)
-	ax.set_xlabel('X')
-	ax.set_ylabel('Y')
-	ax.set_zlabel('Z')
-	plt.tight_layout()
-	plt.show()
-	
-	return grid_z
-
-
-### Raster cropping
+# Type: (jnp.array, float, float) -> any
+def unit_grid2_sample_fn(grid2, x, y):
+	"""
+	# https://docs.jax.dev/en/latest/_autosummary/jax.lax.dynamic_slice.html
+	"""
+	x = jnp.clip(x, 0, 1)
+	y = jnp.clip(y, 0, 1)
+	x_idx = jnp.floor(x * grid2.shape[1]-1).astype(jnp.int32)
+	y_idx = jnp.floor(y * grid2.shape[0]-1).astype(jnp.int32)
+	return jax.lax.dynamic_slice(grid2, (y_idx, x_idx), (1, 1))[0, 0]
 
 # Perform CRS transformation and crop with rasterio/shapely
-# type: (str, str, float, float, float, float) -> Tuple[np.ndarray, Tuple[int, int, int, int]]
+# Type: (str, str, float, float, float, float) -> Tuple[np.ndarray, Tuple[int, int, int, int]]
 def crop_raster(raster_path, bound_crs, bound_left, bound_low, bound_right, bound_high):
 	
 	# load raster data
@@ -106,7 +62,7 @@ def crop_raster(raster_path, bound_crs, bound_left, bound_low, bound_right, boun
 
 ### Data pipeline
 
-# type: (np.ndarray, np.ndarray, int, bool) ~> Tuple[np.ndarray, np.ndarray]
+# Type: (np.ndarray, np.ndarray, int, bool) ~> Tuple[np.ndarray, np.ndarray]
 def batch_generator(data_x, data_y, batch_size, shuffle_key=None):
 	
 	# assertions
@@ -123,9 +79,62 @@ def batch_generator(data_x, data_y, batch_size, shuffle_key=None):
 			yield batch_x, batch_y
 
 
-###! Deprecated
+### Deprecated and experimental
 
-# type: (np.ndarray, Tuple[float, float, float, float], Tuple[float, float, float, float], bool) -> Tuple[np.ndarray, np.ndarray]
+# from sklearn import gaussian_process
+# # Type: (np.ndarray, np.ndarray, np.ndarray, np.ndarray) -> np.ndarray
+# def interp2d_gpr_rbf(values, coords, grid_x, grid_y):
+	
+	# # values_mean = values.mean()
+	# # values_std = values.std()
+	# # values = (values - values_mean) / values_std
+	
+	# #kernel = 1 * gaussian_process.kernels.RBF(length_scale=100.0, length_scale_bounds=(1e-2, 1e2))
+	# gpr = gaussian_process.GaussianProcessRegressor()
+	# gpr.fit(coords, values)
+	
+	# grid_flat = np.column_stack([grid_x.ravel(), grid_y.ravel()])
+	# grid_z = gpr.predict(grid_flat).reshape(grid_x.shape)
+	
+	# # grid_z = grid_z * values_std + values_mean
+	
+	# return grid_z
+
+# from pykrige.ok import OrdinaryKriging
+# def interp2d_ok(values, coords, grid_x, grid_y):
+	
+	# ordinary_kriging = OrdinaryKriging(
+		# coords[:,0],
+		# coords[:,1],
+		# values,
+		# variogram_model='linear',
+		# verbose=True
+	# )
+	# grid_z, ss = ordinary_kriging.execute('grid', np.linspace(grid_x.min(), grid_x.max(), grid_x.shape[1]), np.linspace(grid_y.max(), grid_y.min(), grid_y.shape[0]))
+	
+	# import matplotlib.pyplot as plt
+	
+	# fig = plt.figure(figsize=(5, 5))
+	# ax = fig.add_subplot(111, projection='3d')
+	# ax.plot_surface(grid_x, grid_y, grid_z, cmap='prism', alpha=0.8, linewidth=0)
+	# contours = ax.contour(
+		# grid_x, grid_y, grid_z,
+		# zdir='z',
+		# offset=np.min(grid_z)-1,
+		# levels=10,
+		# cmap='Oranges'
+	# )
+	# ax.clabel(contours, fmt='%1.1f', colors='black', fontsize=8)
+	# ax.view_init(elev=20, azim=270)
+	# ax.set_xlabel('X')
+	# ax.set_ylabel('Y')
+	# ax.set_zlabel('Z')
+	# plt.tight_layout()
+	# plt.show()
+	
+	# return grid_z
+
+# Type: (np.ndarray, Tuple[float, float, float, float], Tuple[float, float, float, float], bool) -> Tuple[np.ndarray, np.ndarray]
 def crop_matrix_linear(matrix, bound, target, verbose=False):
 	
 	###! Does not handle curvature, results in incorrect projection
@@ -191,7 +200,7 @@ def crop_matrix_linear(matrix, bound, target, verbose=False):
 	return matrix_crop, crop_idx
 
 
-# type: (List, (List)->List, int) -> List
+# Type: (List, (List)->List, int) -> List
 def multiprocess_list(list_data, list_proc_fn, max_threads=999):
 	
 	###! slower than list comp
@@ -212,7 +221,7 @@ def multiprocess_list(list_data, list_proc_fn, max_threads=999):
 	
 	return result
 
-# type: (np.ndarray, np.ndarray, np.ndarray, np.ndarray) -> np.ndarray
+# Type: (np.ndarray, np.ndarray, np.ndarray, np.ndarray) -> np.ndarray
 def interpolate_hydraulic_grid(values, coords, grid_x, grid_y):
 	
 	raise(Exception("Deprecated"))

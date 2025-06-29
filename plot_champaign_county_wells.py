@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 from PIL import Image
-from library.visualize import animate_hydrology, plot_surface3d
+from library.visual import animate_hydrology, plot_surface3d
 
 
 ### setup

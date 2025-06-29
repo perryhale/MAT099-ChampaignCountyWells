@@ -9,7 +9,7 @@ from tqdm import tqdm
 from library.data import batch_generator
 from library.models.fdm import darcyflow_fdm_periodic, cfl_value
 from library.models.nn import *
-from library.visualize import animate_hydrology, plot_surface3d
+from library.visual import animate_hydrology, plot_surface3d
 
 
 ### Setup

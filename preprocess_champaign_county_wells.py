@@ -147,7 +147,7 @@ h_time = np.array([interp2d_lrbf(row, data_wells, grid_x, grid_y) for row in tqd
 
 ###! interpolate surface using Dirichlet constrained FDM equilibrium
 # import matplotlib.pyplot as plt
-# from library.visualize import plot_surface3d
+# from library.visual import plot_surface3d
 # solver = darcyflow_fdm_neumann
 # grid_extent = (data_bound_w, data_bound_e, data_bound_n, data_bound_s)
 # max_iter = 10_000

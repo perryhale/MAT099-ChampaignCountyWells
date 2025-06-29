@@ -99,4 +99,3 @@ def count_params(params):
 	elif isinstance(params, (list, tuple)):
 		return jnp.sum(jnp.array([count_params(item) for item in params]))
 	return 0
-

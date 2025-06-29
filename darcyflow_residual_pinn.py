@@ -11,9 +11,9 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 from sklearn.preprocessing import MinMaxScaler
 
-from library.data import batch_generator
+from library.data import batch_generator, unit_grid2_sample_fn
 from library.models.nn import *
-from library.visualize import animate_hydrology, plot_surface3d
+from library.visual import *
 
 
 ### setup
@@ -32,20 +32,20 @@ RNG_SEED = 999
 K0, K1, K2 = jax.random.split(jax.random.key(RNG_SEED), 3)
 
 # data partitions
-EPOCHS = 4
+EPOCHS = 1
 BATCH_SIZE = 64
 PART_TRAIN = 0.75
 PART_VAL = 0.05
 PART_TEST = 0.20
 
 # optimizer
-ETA = 1e-3
+ETA = 1e-4
 LAM_MSE = 1.0
-LAM_PHYS = 1.0
-LAM_L2 = 0.25
+LAM_PHYS = 0.0
+LAM_L2 = 0.0
 
 # physical constants
-SS = 1e-1
+SS = 1e-4
 RR = 1e-7
 
 
@@ -55,8 +55,6 @@ RR = 1e-7
 with jnp.load(I_CACHE) as i_cache:
 	k_crop = i_cache['k_crop']
 	data_wells = i_cache['data_wells']
-	grid_x = i_cache['grid_x']
-	grid_y = i_cache['grid_y']
 	print(f"Loaded \"{I_CACHE}\"")
 	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
@@ -112,31 +110,43 @@ print(f"Val: x~{val_x.shape}, y~{val_y.shape}, steps={val_steps}")
 print(f"Test: x~{test_x.shape}, y~{test_y.shape}, steps={test_steps}")
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
-# initialise model
-h_param = init_dense_neural_network(K0, [3, 32, 32, 32, 1])
-h_fn = jax.vmap(lambda p,xyt: dense_neural_network(p, xyt, ha=jax.nn.tanh)[0,0], in_axes=(None, 0)) # Nx[0,1]x[0,1]x[0,1] -> [0,1]
-k_fn = lambda xy: jax.lax.dynamic_slice(k_crop, (jnp.floor(xy[1] * k_crop.shape[0]-1).astype(jnp.int32), jnp.floor(xy[0] * k_crop.shape[1]-1).astype(jnp.int32)), (1, 1))[0, 0] # [0,1]x[0,1] -> R
+# initialise model+loss
+h_param = init_dense_neural_network(K0, [3, 256, 256, 1])
+h_fn = jax.vmap(lambda p,xyt: dense_neural_network(p, xyt, ha=jax.nn.relu)[0,0], in_axes=(None, 0)) # N x [0,1] x [0,1] x [0,1] -> N x [0,1]
 # rr_param = init_dense_neural_network(K0, [3, 32, 32, 32, 1])
 # rr_fn = h_fn
 
-def loss_3dgwf(params, batch_xyt):
+def loss_3d_ground_water_flow(params, batch_xyt):
+	"""
+	# loss = ||R||^2
+	# R = Ss * ∂h/∂t - ∇·(K ∇h) - Rr
+	# ∇h = (∂h/∂x, ∂h/∂y)
+	# https://en.wikipedia.org/wiki/Groundwater_flow_equation
+	# https://github.com/jax-ml/jax/issues/3022#issuecomment-2733591263
+	"""
 	
-	# setup
-	h_fn_ = lambda xyt: h_fn(params[0], xyt[jnp.newaxis, :])[0]
-	flux_fn = lambda xyt: k_fn(xyt[:2]) * jax.grad(h_fn_)(xyt)[:2] # ∇h = (∂h/∂x, ∂h/∂y)
+	h_fn_mono = lambda xyt: h_fn(params[0], xyt[jnp.newaxis, :])[0]
+	h_fn_flux = lambda xyt: unit_grid2_sample_fn(k_crop, *xyt[:2]) * jax.grad(h_fn_mono)(xyt)[:2]
 	
 	# compute 3d groundwater flow terms
-	batch_dhdt = jax.vmap(lambda xyt: jax.grad(h_fn_)(xyt)[2])(batch_xyt)
-	batch_div_flux = jax.vmap(lambda xyt: jnp.trace(jax.jacfwd(flux_fn)(xyt)))(batch_xyt)
+	batch_dhdt = jax.vmap(lambda xyt: jax.grad(h_fn_mono)(xyt)[2])(batch_xyt)
+	batch_div_flux = jax.vmap(lambda xyt: jnp.trace(jax.jacfwd(h_fn_flux)(xyt)))(batch_xyt)
+	batch_ss = SS#params[-1][0]
+	batch_rr = RR#params[-1][1]
 	
 	# return l2 of residual
-	residual = SS * batch_dhdt - batch_div_flux - RR # Ss * ∂h/∂t - ∇·(K ∇h) - Rr
+	residual = batch_ss * batch_dhdt - batch_div_flux - batch_rr
 	loss = jnp.mean(residual**2)
 	
 	return loss
 
 def loss_fn(params, batch_xyt, batch_z):
-	loss = LAM_MSE*loss_mse(h_fn(params[0], batch_xyt), batch_z) + LAM_PHYS*loss_3dgwf(params, batch_xyt) + LAM_L2*lp_norm(params, order=2)
+	
+	loss_batch = LAM_MSE * loss_mse(h_fn(params[0], batch_xyt), batch_z)
+	loss_phys = LAM_PHYS * loss_3d_ground_water_flow(params, batch_xyt)
+	loss_reg = LAM_L2 * lp_norm(params, order=2)
+	
+	loss = loss_batch + loss_phys + loss_reg
 	return loss
 
 # try cache
@@ -152,20 +162,20 @@ try:
 except Exception as e:
 	
 	# setup optimiser
-	params = [h_param]
-	optim = optax.adamw(ETA)
-	state = optim.init(params)
+	params = [h_param] ###! wrapper list to allow writer to manually add extra parameters
+	opt = optax.adamw(ETA)
+	opt_state = opt.init(params)
 	epoch_key = K2
 	history = {'batch_loss':[], 'train_loss':[], 'val_loss':[], 'test_loss':[]}
 	print(f"history_keys={list(history.keys())}")
 	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 	
 	@jax.jit
-	def optimizer_step(s, p, x, y):
-		loss, grad = jax.value_and_grad(loss_fn)(p, x, y)
-		updates, next_state = optim.update(grad, s, p)
-		next_params = optax.apply_updates(p, updates)
-		return loss, next_state, next_params
+	def opt_step(opt_state_, params_, x, y):
+		loss, grad = jax.value_and_grad(loss_fn)(params_, x, y)
+		updates, opt_state_ = opt.update(grad, opt_state_, params_)
+		params_ = optax.apply_updates(params_, updates)
+		return loss, opt_state_, params_
 	
 	# fit model
 	for i in range(EPOCHS):
@@ -180,7 +190,7 @@ except Exception as e:
 		for j in range(train_steps):
 			
 			# batch loss and update
-			batch_loss, state, params = optimizer_step(state, params, *next(train_generator))
+			batch_loss, opt_state, params = opt_step(opt_state, params, *next(train_generator))
 			train_loss += batch_loss / train_steps
 			
 			# record/trace
@@ -226,12 +236,24 @@ plt.ylabel("Loss")
 plt.grid()
 plt.show()
 
-# plot surface
+###! plot surface
+
 axis_x = jnp.linspace(0, 1, k_crop.shape[1])
 axis_y = jnp.linspace(0, 1, k_crop.shape[0])
-axis_t = jnp.linspace(0, 1, 100)
-h_sim = h_fn(params[0], jnp.array(jnp.meshgrid(axis_x, axis_y, axis_t)).T.reshape(-1, 3)).T.reshape(axis_t.shape[0], axis_y.shape[0], axis_x.shape[0])
-print(h_sim.shape)
+axis_t = jnp.linspace(0, 1, 500)
+#h_sim = h_fn(params[0], jnp.array(jnp.meshgrid(axis_x, axis_y, axis_t)).T.reshape(-1, 3)).reshape(axis_y.shape[0], axis_x.shape[0], axis_t.shape[0]) ###! method does not work with asymetric axis
+#print(h_sim.shape)
+
+# Suppose:
+# axis_x: [X]  (e.g., jnp.linspace(0, 1, 32))
+# axis_y: [Y]  (e.g., jnp.linspace(0, 1, 64))
+# axis_t: [T]  (e.g., jnp.linspace(0, 1, 100))
+# Create meshgrid with indexing='ij' to preserve axis order (T, Y, X)
+#tt, yy, xx =   # shape: (T, Y, X)
+# Stack into a single array of points: shape (T * Y * X, 3)
+# Note: x, y, t order in h_fn
+# Call your function: h_fn(params, [N, 3]) -> [N, 1]
+h_sim = h_fn(params[0], jnp.stack(jnp.meshgrid(axis_t, axis_y, axis_x, indexing='ij')[::-1], axis=-1).reshape(-1, 3)).reshape(len(axis_t), len(axis_y), len(axis_x))
 
 fig, ax = plt.subplots(figsize=(5, 5))
 ax_contour = ax.contour(h_sim[50], levels=10, cmap='binary_r')
@@ -242,11 +264,15 @@ ax.set_yticks([],[])
 plt.tight_layout()
 plt.show()
 
-plot_surface3d(*jnp.meshgrid(axis_x, axis_y), h_sim[50])
-plt.show()
+fig, ax = plot_surface3d(*jnp.meshgrid(axis_x, axis_y), h_sim[50], sfc_cmap='jet', cnt_cmap='binary_r', xlabel='x', ylabel='y', zlabel='z')
+for angle in range(0, 360, 5):
+    ax.view_init(elev=30, azim=angle)
+    plt.draw()
+    plt.pause(0.1)
 
 animate_hydrology(
 	h_sim,
 	k=k_crop,
+	grid_extent=(0,1,0,1),
 	cmap_contour='binary'
 )
