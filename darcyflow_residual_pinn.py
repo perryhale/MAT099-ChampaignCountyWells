@@ -32,17 +32,17 @@ RNG_SEED = 999
 K0, K1, K2 = jax.random.split(jax.random.key(RNG_SEED), 3)
 
 # data partitions
-EPOCHS = 1
+EPOCHS = 2
 BATCH_SIZE = 64
 PART_TRAIN = 0.75
 PART_VAL = 0.05
-PART_TEST = 0.20
+PART_TEST = 0.2
 
 # optimizer
 ETA = 1e-4
 LAM_MSE = 1.0
 LAM_PHYS = 0.0
-LAM_L2 = 0.0
+LAM_L2 = 0.1
 
 # physical constants
 SS = 1e-4
@@ -155,7 +155,11 @@ try:
 		w_cache = pickle.load(f)
 		history = w_cache['history']
 		params = w_cache['params']
-		h_param = params[0]
+		h_param = w_cache['params'][0]
+		axis_x = w_cache['sample']['axis_x']
+		axis_y = w_cache['sample']['axis_y']
+		axis_t = w_cache['sample']['axis_t']
+		h_sim = w_cache['sample']['h_sim']
 		print(f"Loaded \"{W_CACHE}\"")
 		print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
@@ -213,14 +217,31 @@ except Exception as e:
 	for _ in range(test_steps):
 		test_loss += loss_fn(params, *next(test_generator)) / test_steps
 	
-	# record test statistics
+	# record/trace
 	history['test_loss'] = test_loss
+	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
+	
+	# sample surface
+	axis_x = jnp.linspace(0, 1, k_crop.shape[1])
+	axis_y = jnp.linspace(0, 1, k_crop.shape[0])
+	axis_t = jnp.linspace(0, 1, 500)
+	h_sim = h_fn(params[0], jnp.stack(jnp.meshgrid(axis_t, axis_y, axis_x, indexing='ij')[::-1], axis=-1).reshape(-1, 3)).reshape(len(axis_t), len(axis_y), len(axis_x))
+	
+	# record/trace
+	print(h_sim.shape)
+	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 	
 	# create cache
 	with open(W_CACHE, 'wb') as f:
 		pickle.dump(dict(
 			params=params,
-			history=history
+			history=history,
+			sample=dict(
+				axis_x=axis_x,
+				axis_y=axis_y,
+				axis_t=axis_t,
+				h_sim=h_sim
+			)
 		), f)
 	print(f"Saved \"{W_CACHE}\"")
 	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
@@ -235,26 +256,10 @@ plt.xlabel("Iteration")
 plt.ylabel("Loss")
 plt.grid()
 plt.show()
+print("Closed plot")
+print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
-###! plot surface
-
-axis_x = jnp.linspace(0, 1, k_crop.shape[1])
-axis_y = jnp.linspace(0, 1, k_crop.shape[0])
-axis_t = jnp.linspace(0, 1, 500)
-#h_sim = h_fn(params[0], jnp.array(jnp.meshgrid(axis_x, axis_y, axis_t)).T.reshape(-1, 3)).reshape(axis_y.shape[0], axis_x.shape[0], axis_t.shape[0]) ###! method does not work with asymetric axis
-#print(h_sim.shape)
-
-# Suppose:
-# axis_x: [X]  (e.g., jnp.linspace(0, 1, 32))
-# axis_y: [Y]  (e.g., jnp.linspace(0, 1, 64))
-# axis_t: [T]  (e.g., jnp.linspace(0, 1, 100))
-# Create meshgrid with indexing='ij' to preserve axis order (T, Y, X)
-#tt, yy, xx =   # shape: (T, Y, X)
-# Stack into a single array of points: shape (T * Y * X, 3)
-# Note: x, y, t order in h_fn
-# Call your function: h_fn(params, [N, 3]) -> [N, 1]
-h_sim = h_fn(params[0], jnp.stack(jnp.meshgrid(axis_t, axis_y, axis_x, indexing='ij')[::-1], axis=-1).reshape(-1, 3)).reshape(len(axis_t), len(axis_y), len(axis_x))
-
+# plot surface
 fig, ax = plt.subplots(figsize=(5, 5))
 ax_contour = ax.contour(h_sim[50], levels=10, cmap='binary_r')
 ax_clabel = ax.clabel(ax_contour, inline=True, fontsize=8, colors='red')
@@ -263,12 +268,24 @@ ax.set_xticks([],[])
 ax.set_yticks([],[])
 plt.tight_layout()
 plt.show()
+print("Closed plot")
+print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 fig, ax = plot_surface3d(*jnp.meshgrid(axis_x, axis_y), h_sim[50], sfc_cmap='jet', cnt_cmap='binary_r', xlabel='x', ylabel='y', zlabel='z')
-for angle in range(0, 360, 5):
-    ax.view_init(elev=30, azim=angle)
-    plt.draw()
-    plt.pause(0.1)
+fig_loop_ctrl = [False, 0]
+def fig_loop_break_fn():
+	fig_loop_ctrl[0] = not fig_loop_ctrl[0]
+fig.canvas.mpl_connect('close_event', lambda event: fig_loop_break_fn())
+while True:
+	fig_loop_ctrl[1] += 45
+	ax.view_init(elev=25, azim=(270+fig_loop_ctrl[1])%360)
+	plt.draw()
+	plt.pause(1.0)
+	if fig_loop_ctrl[0]:
+		plt.close(fig)
+		break
+print("Closed plot")
+print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 animate_hydrology(
 	h_sim,
@@ -276,3 +293,5 @@ animate_hydrology(
 	grid_extent=(0,1,0,1),
 	cmap_contour='binary'
 )
+print("Closed plot")
+print(f"[Elapsed time: {time.time()-T0:.2f}s]")

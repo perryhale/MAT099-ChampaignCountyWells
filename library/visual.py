@@ -120,3 +120,5 @@ def plot_surface3d(grid_x, grid_y, grid_z, k=None, figsize=(5,5), sfc_cmap='pris
 # k_extent = [grid_x[0,0] - (grid_x[0,1] - grid_x[0,0])/2, grid_x[0,-1] + (grid_x[0,1] - grid_x[0,0])/2, grid_y[0,0] - (grid_y[1,0] - grid_y[0,0])/2, grid_y[-1,0] + (grid_y[1,0] - grid_y[0,0])/2]
 # fig, ax = plt.subplots(figsize=(8,8)) if frame_square else plt.subplots(figsize=(8,8*(grid_y.max() - grid_y.min()) / (grid_x.max() - grid_x.min())))
 # ax.set_aspect('equal') ###! patch
+
+#fig.canvas.mpl_connect('button_press_event', lambda event: plt.close(event.canvas.figure))
