@@ -222,13 +222,15 @@ except Exception as e:
 	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 	
 	# sample surface
-	axis_x = jnp.linspace(0, 1, k_crop.shape[1])
-	axis_y = jnp.linspace(0, 1, k_crop.shape[0])
-	axis_t = jnp.linspace(0, 1, 500)
-	h_sim = h_fn(params[0], jnp.stack(jnp.meshgrid(axis_t, axis_y, axis_x, indexing='ij')[::-1], axis=-1).reshape(-1, 3)).reshape(len(axis_t), len(axis_y), len(axis_x))
-	
-	# record/trace
+	axis_x = jnp.linspace(-2, 3, k_crop.shape[1])
+	axis_y = jnp.linspace(-2, 3, k_crop.shape[0])
+	axis_t = jnp.linspace(0, 2, 200)
+	h_sim = h_fn(params[0], jnp.stack(jnp.meshgrid(axis_t, axis_y, axis_x, indexing='ij')[::-1], axis=-1).reshape(-1, 3))
+	h_sim = data_scaler.data_min_[3] + h_sim * data_scaler.data_range_[3]
+	h_sim = h_sim.reshape(len(axis_t), len(axis_y), len(axis_x))
 	print(h_sim.shape)
+	print(h_sim.min())
+	print(h_sim.max())
 	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 	
 	# create cache
@@ -261,7 +263,7 @@ print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 # plot surface
 fig, ax = plt.subplots(figsize=(5, 5))
-ax_contour = ax.contour(h_sim[50], levels=10, cmap='binary_r')
+ax_contour = ax.contour(h_sim[50], levels=10, cmap='binary_r', extent=(0,1,0,1))
 ax_clabel = ax.clabel(ax_contour, inline=True, fontsize=8, colors='red')
 ax.grid()
 ax.set_xticks([],[])
@@ -290,8 +292,13 @@ print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 animate_hydrology(
 	h_sim,
 	k=k_crop,
-	grid_extent=(0,1,0,1),
-	cmap_contour='binary'
+	grid_extent=(axis_x.min(), axis_x.max(), axis_y.min(), axis_y.max()), ###!
+	draw_box=(0,0,1,1),
+	draw_k_in_box=True,
+	cmap_contour='binary',
+	axis_ticks=True,
+	origin=None,
+	isolines=25
 )
 print("Closed plot")
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")
