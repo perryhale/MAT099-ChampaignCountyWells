@@ -46,21 +46,21 @@ PART_TEST = 0.2
 ETA = 1e-4
 LAM_MSE = 1.0
 LAM_PHYS = 1.0
-LAM_L2 = 0.1
+LAM_L2 = 0.0
 
 # physical constants
 SS = 1e-4
 RR = 1e-7
 
 # sampling
-SAMPLE_XMIN = -2
-SAMPLE_XMAX = +3
+SAMPLE_XMIN = 0#-2
+SAMPLE_XMAX = 1#+3
 SAMPLE_XRES = 0 ###! 0 -> inherit k shape
-SAMPLE_YMIN = -2
-SAMPLE_YMAX = +3
+SAMPLE_YMIN = 0#-2
+SAMPLE_YMAX = 1#+3
 SAMPLE_YRES = 0 ###! 0 -> inherit k shape
 SAMPLE_TMIN = 0
-SAMPLE_TMAX = 2
+SAMPLE_TMAX = 1
 SAMPLE_TRES = 400
 SAMPLE_BATCH = False
 
@@ -235,7 +235,7 @@ except Exception as e:
 	
 	# record/trace
 	history['test_loss'] = test_loss
-	print(f"test_loss={test_loss}")
+	print(f"test_loss={test_loss:.4f}")
 	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 	
 	# sample surface
@@ -253,9 +253,7 @@ except Exception as e:
 	h_sim = data_scaler.data_min_[3] + h_sim * data_scaler.data_range_[3]
 	h_sim = h_sim.reshape(len(axis_t), len(axis_y), len(axis_x))
 	
-	print(h_sim.shape)
-	print(h_sim.min())
-	print(h_sim.max())
+	print(f"h_sim.shape={h_sim.shape}")
 	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 	
 	# create cache
@@ -326,7 +324,7 @@ animate_hydrology(
 	origin=None,
 	isolines=25,
 	scatter_data=data_scatter.T,
-#	save_path="DFRPINN_EXTRAPOLATED_SURFACE_with_PHYS_only.webm"
+	save_path="DFRPINN_PRECISE_SURFACE.webm"
 )
 print("Closed plot")
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")
