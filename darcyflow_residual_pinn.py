@@ -11,7 +11,11 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 from sklearn.preprocessing import MinMaxScaler
 
-from library.data import batch_generator, unit_grid2_sample_fn
+from library.data import (
+	batch_generator,
+	batch_generator_mono,
+	unit_grid2_sample_fn
+)
 from library.models.nn import *
 from library.visual import *
 
@@ -41,7 +45,7 @@ PART_TEST = 0.2
 # optimizer
 ETA = 1e-4
 LAM_MSE = 1.0
-LAM_PHYS = 0.0
+LAM_PHYS = 1.0
 LAM_L2 = 0.1
 
 # physical constants
@@ -58,6 +62,7 @@ SAMPLE_YRES = 0 ###! 0 -> inherit k shape
 SAMPLE_TMIN = 0
 SAMPLE_TMAX = 2
 SAMPLE_TRES = 400
+SAMPLE_BATCH = False
 
 
 ### main
@@ -230,15 +235,24 @@ except Exception as e:
 	
 	# record/trace
 	history['test_loss'] = test_loss
+	print(f"test_loss={test_loss}")
 	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 	
 	# sample surface
 	axis_x = jnp.linspace(SAMPLE_XMIN, SAMPLE_XMAX, k_crop.shape[1] if (SAMPLE_XRES==0) else SAMPLE_XRES)
 	axis_y = jnp.linspace(SAMPLE_YMIN, SAMPLE_YMAX, k_crop.shape[0] if (SAMPLE_YRES==0) else SAMPLE_YRES)
 	axis_t = jnp.linspace(SAMPLE_TMIN, SAMPLE_TMAX, SAMPLE_TRES)
-	h_sim = h_fn(params[0], jnp.stack(jnp.meshgrid(axis_t, axis_y, axis_x, indexing='ij')[::-1], axis=-1).reshape(-1, 3))
+	
+	sample_points = jnp.stack(jnp.meshgrid(axis_t, axis_y, axis_x, indexing='ij')[::-1], axis=-1).reshape(-1, 3)
+	if SAMPLE_BATCH:
+		sample_generator = batch_generator_mono(sample_points, BATCH_SIZE)
+		sample_steps = math.ceil(len(sample_points) / BATCH_SIZE)
+		h_sim = jnp.concatenate([h_fn(params[0], next(sample_generator)) for _ in range(sample_steps)])
+	else:
+		h_sim = h_fn(params[0], sample_points)
 	h_sim = data_scaler.data_min_[3] + h_sim * data_scaler.data_range_[3]
 	h_sim = h_sim.reshape(len(axis_t), len(axis_y), len(axis_x))
+	
 	print(h_sim.shape)
 	print(h_sim.min())
 	print(h_sim.max())
@@ -304,7 +318,7 @@ data_scatter = (data_wells - data_scaler.data_min_[:2]) / data_scaler.data_range
 animate_hydrology(
 	h_sim,
 	k=k_crop,
-	grid_extent=(axis_x.min(), axis_x.max(), axis_y.min(), axis_y.max()), ###!
+	grid_extent=(axis_x.min(), axis_x.max(), axis_y.min(), axis_y.max()),
 	draw_box=(0,0,1,1),
 	draw_k_in_box=True,
 	cmap_contour='binary',
@@ -312,7 +326,7 @@ animate_hydrology(
 	origin=None,
 	isolines=25,
 	scatter_data=data_scatter.T,
-	save_path="DFRPINN_EXTRAPOLATED_SURFACE_250629.webm"
+#	save_path="DFRPINN_EXTRAPOLATED_SURFACE_with_PHYS_only.webm"
 )
 print("Closed plot")
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")

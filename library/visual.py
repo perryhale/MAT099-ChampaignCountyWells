@@ -17,7 +17,7 @@ def animate_hydrology(
 		isolines=10, # int
 		cmap_k = 'BrBG', # str|?~plt.cm.*
 		cmap_contour = 'Oranges', # str|?~plt.cm.*
-		frame_interval=10, # int
+		frame_interval=50/3, # float
 		frame_fps=60, # int
 		frame_skip=0, # int
 		save_path=None, # str|None,

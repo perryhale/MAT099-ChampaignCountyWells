@@ -78,6 +78,18 @@ def batch_generator(data_x, data_y, batch_size, shuffle_key=None):
 			batch_y = data_y[batch_idx]
 			yield batch_x, batch_y
 
+# Type: (np.ndarray, int, bool) ~> Tuple[np.ndarray, np.ndarray]
+def batch_generator_mono(data_x, batch_size, shuffle_key=None):
+	
+	# yield infinite batches optionally shuffled
+	while True:
+		n_samples = len(data_x)
+		data_idx = jax.random.permutation(shuffle_key, n_samples) if (shuffle_key is not None) else jnp.array(range(n_samples))
+		for batch_data_idx in range(0, n_samples, batch_size):
+			batch_idx = data_idx[batch_data_idx:batch_data_idx+batch_size]
+			batch_x = data_x[batch_idx]
+			yield batch_x
+
 
 ### Deprecated and experimental
 
