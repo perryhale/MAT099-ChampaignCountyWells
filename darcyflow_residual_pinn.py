@@ -40,7 +40,7 @@ EPOCHS = 2
 BATCH_SIZE = 64
 PART_TRAIN = 0.75
 PART_VAL = 0.05
-PART_TEST = 0.2
+PART_TEST = 0.20
 
 # optimizer
 ETA = 1e-4
@@ -61,7 +61,7 @@ SAMPLE_YMAX = 1#+3
 SAMPLE_YRES = 0 ###! 0 -> inherit k shape
 SAMPLE_TMIN = 0
 SAMPLE_TMAX = 2
-SAMPLE_TRES = 400
+SAMPLE_TRES = 100
 SAMPLE_BATCH = False
 
 
@@ -80,7 +80,7 @@ print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 # populate xyt->z
 data_points = []
-for i in range(0, data_surface.shape[0]-1, 1):
+for i in range(0, data_surface.shape[0], 1):
 	for j in range(0, data_surface.shape[1]-1, 1):
 		xytz = (*data_wells[j], data_surface[i][0], data_surface[i][j+1]) # xytz
 		data_points.append(xytz)
@@ -88,11 +88,22 @@ for i in range(0, data_surface.shape[0]-1, 1):
 data_points = jnp.array(data_points)
 
 # partition data
+# n_data = len(data_points)
+# shuffle_idx = jax.random.permutation(K0, n_data)
+# data_train = data_points[shuffle_idx[:int(PART_TRAIN * n_data)]]
+# data_val = data_points[shuffle_idx[int(PART_TRAIN * n_data) : int((PART_TRAIN + PART_VAL) * n_data)]]
+# data_test = data_points[shuffle_idx[int((PART_TRAIN + PART_VAL) * n_data) : int((PART_TRAIN + PART_VAL + PART_TEST) * n_data)]]
+
+###! partition data with train/val-test split in time order, shuffling val and test together
 n_data = len(data_points)
-shuffle_idx = jax.random.permutation(K0, n_data)
-data_train = data_points[shuffle_idx[:int(PART_TRAIN * n_data)]]
-data_val = data_points[shuffle_idx[int(PART_TRAIN * n_data) : int((PART_TRAIN + PART_VAL) * n_data)]]
-data_test = data_points[shuffle_idx[int((PART_TRAIN + PART_VAL) * n_data) : int((PART_TRAIN + PART_VAL + PART_TEST) * n_data)]]
+n_train = int(PART_TRAIN * n_data)
+n_val = int(PART_VAL * n_data)
+n_test = int(PART_TEST * n_data)
+shuffle_idx = n_train + jax.random.permutation(K0, n_val + n_test)
+data_train = data_points[:n_train]
+data_val = data_points[shuffle_idx[:n_val]]
+data_test = data_points[shuffle_idx[n_val:n_test]]
+
 
 # project to unit hypercube
 data_scaler = MinMaxScaler(feature_range=(0, 1))
