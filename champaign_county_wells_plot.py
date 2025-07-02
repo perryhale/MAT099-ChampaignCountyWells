@@ -15,9 +15,11 @@ print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 # input paths
 K_PATH = 'data/SaturatedHydraulicConductivity_1km/KSat_Arithmetic_1km.tif'
+S_CACHE = 'cache/data_surface.csv'
 I_CACHE = 'cache/data_interpolated.npz'
 
 # plotting arguments
+PLOT_DESC = True
 PLOT_DEBUG = True
 PLOT_HYDRO = True
 PLOT_KSAT = True
@@ -28,6 +30,11 @@ VIDEO_FRAME_SKIP = 0
 
 
 ### main
+
+# load/unpack cache
+data_surface = pd.read_csv(S_CACHE)
+print(f"Loaded \"{S_CACHE}\"")
+print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 with np.load(I_CACHE) as data_interpolated:
 	k = np.array(Image.open(K_PATH))
@@ -55,6 +62,12 @@ with np.load(I_CACHE) as data_interpolated:
 	print(data_wells.shape)
 	print(f"Loaded \"{I_CACHE}\"")
 	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
+
+# plot descriptive statistics
+if PLOT_DESC:
+	data_surface.hist(bins=50, figsize=(20,15))
+	plt.subplots_adjust(top=0.9, bottom=0.1, left=0.1, right=0.9, wspace=0.3, hspace=0.8)
+	plt.show()
 
 # plot debug
 if PLOT_DEBUG:
