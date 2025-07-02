@@ -23,7 +23,9 @@ def animate_hydrology(
 		save_path=None, # str|None,
 		origin='upper', ###! 'upper' if (grid_extent is not None) else None)
 		draw_box=None,
-		draw_k_in_box=False
+		draw_k_in_box=False,
+		title_fn=None, # lambda int:str
+		clabel_fmt=None
 	):
 	
 	# init plot
@@ -40,7 +42,7 @@ def animate_hydrology(
 		
 		# setup axis
 		ax.clear()
-		ax.set_title(f"t={t}")
+		ax.set_title(f"t={t}" if title_fn is None else title_fn(t))
 		if not axis_ticks:
 			ax.set_xticks([],[])
 			ax.set_yticks([],[])
@@ -76,7 +78,7 @@ def animate_hydrology(
 		
 		# draw h
 		h_contour = ax.contour(h_time[t], levels=isolines, cmap=cmap_contour, extent=grid_extent, origin=origin)
-		h_contour_labels = ax.clabel(h_contour, inline=True, fontsize=8, colors='red')
+		h_contour_labels = ax.clabel(h_contour, inline=True, fontsize=8, colors='red', fmt=clabel_fmt)
 		#for label in h_contour_labels:
 		#	label.set_bbox(dict(facecolor='white', edgecolor='white', boxstyle='square,pad=0.1'))
 		
