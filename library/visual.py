@@ -22,10 +22,10 @@ def animate_hydrology(
 		frame_skip=0, # int
 		save_path=None, # str|None,
 		origin='upper', ###! 'upper' if (grid_extent is not None) else None)
-		draw_box=None,
-		draw_k_in_box=False,
+		draw_box=None, # tuple(4 x float)
+		draw_k_in_box=False, # bool
 		title_fn=None, # lambda int:str
-		clabel_fmt=None
+		clabel_fmt=None # str | see docs
 	):
 	
 	# init plot

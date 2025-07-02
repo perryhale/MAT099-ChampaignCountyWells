@@ -95,15 +95,14 @@ data_points = jnp.array(data_points)
 # data_test = data_points[shuffle_idx[int((PART_TRAIN + PART_VAL) * n_data) : int((PART_TRAIN + PART_VAL + PART_TEST) * n_data)]]
 
 ###! partition data with train/val-test split in time order, shuffling val and test together
-n_data = len(data_points)
-n_train = int(PART_TRAIN * n_data)
-n_val = int(PART_VAL * n_data)
-n_test = int(PART_TEST * n_data)
+n_data = data_points.shape[0]
+n_train = math.floor(PART_TRAIN * n_data)
+n_val = math.floor(PART_VAL * n_data)
+n_test = math.floor(PART_TEST * n_data)
 shuffle_idx = n_train + jax.random.permutation(K0, n_val + n_test)
 data_train = data_points[:n_train]
 data_val = data_points[shuffle_idx[:n_val]]
 data_test = data_points[shuffle_idx[n_val:n_test]]
-
 
 # project to unit hypercube
 data_scaler = MinMaxScaler(feature_range=(0, 1))
@@ -161,9 +160,9 @@ def loss_3d_ground_water_flow(params, batch_xyt):
 	batch_ss = SS#params[-1][0]
 	batch_rr = RR#params[-1][1]
 	
-	# return l2 of residual
-	residual = batch_ss * batch_dhdt - batch_div_flux - batch_rr
-	loss = jnp.mean(residual**2)
+	# compute l2 of PDE residual
+	loss_darcyflow = batch_ss * batch_dhdt - batch_div_flux - batch_rr
+	loss = jnp.mean(loss_darcyflow**2)
 	
 	return loss
 
@@ -172,8 +171,8 @@ def loss_fn(params, batch_xyt, batch_z):
 	loss_batch = LAM_MSE * loss_mse(h_fn(params[0], batch_xyt), batch_z)
 	loss_phys = LAM_PHYS * loss_3d_ground_water_flow(params, batch_xyt)
 	loss_reg = LAM_L2 * lp_norm(params, order=2)
-	
 	loss = loss_batch + loss_phys + loss_reg
+	
 	return loss
 
 # try cache

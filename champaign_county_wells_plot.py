@@ -1,5 +1,6 @@
 import time
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 from PIL import Image
@@ -17,18 +18,17 @@ K_PATH = 'data/SaturatedHydraulicConductivity_1km/KSat_Arithmetic_1km.tif'
 I_CACHE = 'cache/data_interpolated.npz'
 
 # plotting arguments
-PLOT_DEBUG = False
+PLOT_DEBUG = True
 PLOT_HYDRO = True
-PLOT_KSAT = False
+PLOT_KSAT = True
 PLOT_3DSF = True
 
-VIDEO_SAVE = True
+VIDEO_SAVE = False
 VIDEO_FRAME_SKIP = 0
 
 
 ### main
 
-# load/unpack cache
 with np.load(I_CACHE) as data_interpolated:
 	k = np.array(Image.open(K_PATH))
 	k_crop = data_interpolated['k_crop']
@@ -43,7 +43,6 @@ with np.load(I_CACHE) as data_interpolated:
 	data_bound_e = grid_x.max()
 	grid_extent = (data_bound_w, data_bound_e, data_bound_s, data_bound_n)
 	crop_west_idx, crop_south_idx, crop_east_idx, crop_north_idx = k_crop_idx
-	print("Loaded cache")
 	print("Bounding area:")
 	print("North:", data_bound_n)
 	print("South:", data_bound_s)
@@ -54,9 +53,10 @@ with np.load(I_CACHE) as data_interpolated:
 	print(k_crop.shape)
 	print(h_time.shape)
 	print(data_wells.shape)
+	print(f"Loaded \"{I_CACHE}\"")
 	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
-###! debug plots
+# plot debug
 if PLOT_DEBUG:
 	
 	# grid_x increases left->right

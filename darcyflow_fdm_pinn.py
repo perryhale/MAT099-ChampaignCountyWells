@@ -107,8 +107,8 @@ params = [
 	*init_dense_neural_network(K0, [grid_flat_size, 1_500//4, 750//4, 1_500//4, grid_flat_size]),
 	[0.1, 0.1]
 ]
-pinn_model = jax.vmap(lambda p,x: dense_neural_network(p, x), in_axes=(None, 0))
 fdm_model = jax.vmap(darcyflow_fdm_periodic, in_axes=[0]+6*[None])
+pinn_model = jax.vmap(lambda p,x: dense_neural_network(p, x), in_axes=(None, 0))
 
 # define loss function
 # type: (List[Tuple[jnp.array]], jnp.array, jnp.array) -> float
@@ -201,7 +201,7 @@ plt.grid()
 plt.show()
 
 
-### Autoregressive simulation
+### Auto-regressive simulation
 
 # simulate
 #h_init = jnp.ones(k_crop.shape)
@@ -210,24 +210,26 @@ state = test_x[0]
 h_sim = [state]
 for _ in tqdm(range(len(test_x))):
 	state = pinn_model(params[:-1], state.reshape((1, grid_flat_size, ))).reshape((grid_shape))
-	#state = apply_edge_boundary_conditions(state)
 	h_sim.append(state)
 h_sim = jnp.array(h_sim)
 h_sim = h_sim*data_train_range+data_train_min
 print(f"Simulation completed.")
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
-# compute/plot simulation statistics
+# plot simulation statistics
 h_sim_mean = [h.mean() for h in h_sim[1:]]
 h_sim_var = [h.var() for h in h_sim[1:]]
 h_sim_rmse = [loss_mse(yh, y)**0.5 for yh,y in zip(h_sim[1:], test_y)]
-plt.plot(h_sim_mean, label="Mean")
-plt.plot(h_sim_var, label="Var")
-plt.plot(h_sim_rmse, label="RMSE")
-plt.legend()
-plt.grid()
-plt.xlabel("Time (days)")
-plt.ylabel("Height (metres)")
+fig, axis = plt.subplots(nrows=1, ncols=2, figsize=(14, 5))
+ax0, ax1 = axis
+ax0.plot(h_sim_mean, label="Mean")
+ax0.plot(h_sim_var, label="Var")
+ax1.plot(h_sim_rmse, label="RMSE")
+for ax in axis:
+	ax.set_xlabel("Time (days)")
+	ax.set_ylabel("Height (metres)")
+	ax.legend()
+	ax.grid()
 plt.show()
 
 # animate simulation
@@ -236,6 +238,7 @@ animate_hydrology(
 	k=k_crop,
 	axis_ticks=True,
 	frame_skip=VIDEO_FRAME_SKIP,
+	origin=None,
 	save_path=__file__.replace('.py','.mp4') if VIDEO_SAVE else None
 )
 print("Closed plot")
