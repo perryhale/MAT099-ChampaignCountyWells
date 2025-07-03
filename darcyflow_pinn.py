@@ -123,7 +123,6 @@ val_steps = math.ceil(val_x.shape[0] / BATCH_SIZE)
 test_steps = math.ceil(test_x.shape[0] / BATCH_SIZE)
 
 # memory cleanup
-del n_data
 del shuffle_idx
 del data_points
 del data_train
@@ -137,9 +136,9 @@ print(f"Test: x~{test_x.shape}, y~{test_y.shape}, steps={test_steps}")
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 # initialise model+loss
-h_param = init_dense_neural_network(K0, [3, 256, 256, 1])
+h_param = init_dense_neural_network(K1, [3, 256, 256, 1])
 h_fn = jax.vmap(lambda p,xyt: dense_neural_network(p, xyt, ha=jax.nn.relu)[0,0], in_axes=(None, 0)) # N x [0,1] x [0,1] x [0,1] -> N x [0,1]
-# rr_param = init_dense_neural_network(K0, [3, 32, 32, 32, 1])
+# rr_param = init_dense_neural_network(K2, [3, 32, 32, 32, 1])
 # rr_fn = h_fn
 
 def loss_3d_ground_water_flow(params, batch_xyt):
@@ -191,60 +190,27 @@ try:
 
 except Exception as e:
 	
-	# setup optimiser
-	params = [h_param] ###! wrapper list to allow writer to manually add extra parameters
-	opt = optax.adamw(ETA)
-	opt_state = opt.init(params)
-	epoch_key = K2
-	history = {'batch_loss':[], 'train_loss':[], 'val_loss':[], 'test_loss':[]}
-	print(f"history_keys={list(history.keys())}")
-	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
-	
-	@jax.jit
-	def opt_step(opt_state_, params_, x, y):
-		loss, grad = jax.value_and_grad(loss_fn)(params_, x, y)
-		updates, opt_state_ = opt.update(grad, opt_state_, params_)
-		params_ = optax.apply_updates(params_, updates)
-		return loss, opt_state_, params_
-	
 	# fit model
-	for i in range(EPOCHS):
-		
-		# setup data generators
-		epoch_key = jax.random.split(epoch_key, 1)[0]
-		train_generator = batch_generator(train_x, train_y, BATCH_SIZE, shuffle_key=epoch_key)
-		val_generator = batch_generator(val_x, val_y, BATCH_SIZE)
-		
-		# iterate optimiser
-		train_loss = 0.
-		for j in range(train_steps):
-			
-			# batch loss and update
-			batch_loss, opt_state, params = opt_step(opt_state, params, *next(train_generator))
-			train_loss += batch_loss / train_steps
-			
-			# record/trace
-			history['batch_loss'].append(batch_loss)
-			#print(f"[Elapsed time: {time.time()-T0:.2f}s] epoch={i+1}, batch={j+1}, batch_loss={batch_loss:.4f}")
-		
-		# validation loss
-		val_loss = 0.
-		for _ in range(val_steps):
-			val_loss += loss_fn(params, *next(val_generator)) / val_steps
-		
-		# record/trace
-		history['train_loss'].append(train_loss)
-		history['val_loss'].append(val_loss)
-		print(f"[Elapsed time: {time.time()-T0:.2f}s] epoch={i+1}, train_loss={train_loss:.4f}, val_loss={val_loss:.4f}")
+	params = [h_param]
+	params, history = fit_model(
+		K2,
+		params,
+		loss_fn,
+		(train_x, train_y, train_steps),
+		val_data=(val_x, val_y, val_steps),
+		batch_size=BATCH_SIZE,
+		epochs=EPOCHS,
+		opt=optax.adamw(ETA),
+		start_time=T0
+	)
 	
-	# compute test loss
+	# evaluate model
 	test_generator = batch_generator(test_x, test_y, BATCH_SIZE)
 	test_loss = 0.
 	for _ in range(test_steps):
 		test_loss += loss_fn(params, *next(test_generator)) / test_steps
 	
-	# record/trace
-	history['test_loss'] = test_loss
+	history['test_loss'] = [test_loss]
 	print(f"test_loss={test_loss:.4f}")
 	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 	
