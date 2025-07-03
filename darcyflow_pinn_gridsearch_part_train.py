@@ -180,5 +180,5 @@ for part_train in axis_ratio:
 	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 	
 	axis_history.append(history)
-	print(f"Trialed part_train={part_train}")
+	print(f"Completed trial: part_train={part_train:.2f}")
 	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
