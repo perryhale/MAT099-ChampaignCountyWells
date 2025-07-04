@@ -48,9 +48,9 @@ LAM_MSE = 1.0
 LAM_PHYS = 1.0
 LAM_L2 = 0.0
 
-# physical constants
-SS = 1e-4
-RR = 1e-7
+# physical constants (default)
+SS = 1e-1
+RR = 0.
 
 # sampling
 SAMPLE_XMIN = 0#-2
@@ -60,7 +60,7 @@ SAMPLE_YMIN = 0#-2
 SAMPLE_YMAX = 1#+3
 SAMPLE_YRES = 0 ###! 0 -> inherit k shape
 SAMPLE_TMIN = 0
-SAMPLE_TMAX = 2
+SAMPLE_TMAX = 1. / PART_TRAIN
 SAMPLE_TRES = 100
 SAMPLE_BATCH = False
 
@@ -107,6 +107,7 @@ data_test = data_points[shuffle_idx[n_val:n_test]]
 # project to unit hypercube
 data_scaler = MinMaxScaler(feature_range=(0, 1))
 data_scaler.fit(data_train)
+scale_xytz = data_scaler.data_range_ / jnp.array([1., 1., 3600, 1.])
 
 data_train = data_scaler.transform(data_train)
 data_val = data_scaler.transform(data_val)
@@ -141,7 +142,7 @@ h_fn = jax.vmap(lambda p,xyt: dense_neural_network(p, xyt, ha=jax.nn.relu)[0,0],
 # rr_param = init_dense_neural_network(K2, [3, 32, 32, 32, 1])
 # rr_fn = h_fn
 
-def loss_3d_ground_water_flow(params, batch_xyt):
+def loss_3d_ground_water_flow(params, batch_xyt, scale_xytz):
 	"""
 	# loss = ||R||^2
 	# R = Ss * ∂h/∂t - ∇·(K ∇h) - Rr
@@ -151,13 +152,13 @@ def loss_3d_ground_water_flow(params, batch_xyt):
 	"""
 	
 	h_fn_mono = lambda xyt: h_fn(params[0], xyt[jnp.newaxis, :])[0]
-	h_fn_flux = lambda xyt: unit_grid2_sample_fn(k_crop, *xyt[:2]) * jax.grad(h_fn_mono)(xyt)[:2]
+	h_fn_flux = lambda xyt: unit_grid2_sample_fn(k_crop, *xyt[:2]) * jax.grad(h_fn_mono)(xyt)[:2] * (scale_xytz[3] / scale_xytz[:2])
 	
 	# compute 3d groundwater flow terms
-	batch_dhdt = jax.vmap(lambda xyt: jax.grad(h_fn_mono)(xyt)[2])(batch_xyt)
-	batch_div_flux = jax.vmap(lambda xyt: jnp.trace(jax.jacfwd(h_fn_flux)(xyt)))(batch_xyt)
-	batch_ss = SS#params[-1][0]
-	batch_rr = RR#params[-1][1]
+	batch_dhdt = jax.vmap(lambda xyt: jax.grad(h_fn_mono)(xyt)[2] * (scale_xytz[3] / scale_xytz[2]))(batch_xyt)
+	batch_div_flux = jax.vmap(lambda xyt: jnp.sum(jnp.diag(jax.jacfwd(h_fn_flux)(xyt)[:2, :2]) / scale_xytz[:2]))(batch_xyt)
+	batch_ss = params[-1][0]
+	batch_rr = params[-1][1]
 	
 	# compute l2 of PDE residual
 	loss_darcyflow = batch_ss * batch_dhdt - batch_div_flux - batch_rr
@@ -168,7 +169,7 @@ def loss_3d_ground_water_flow(params, batch_xyt):
 def loss_fn(params, batch_xyt, batch_z):
 	
 	loss_batch = LAM_MSE * loss_mse(h_fn(params[0], batch_xyt), batch_z)
-	loss_phys = LAM_PHYS * loss_3d_ground_water_flow(params, batch_xyt)
+	loss_phys = LAM_PHYS * loss_3d_ground_water_flow(params, batch_xyt, scale_xytz)
 	loss_reg = LAM_L2 * lp_norm(params, order=2)
 	loss = loss_batch + loss_phys + loss_reg
 	
@@ -191,7 +192,7 @@ try:
 except Exception as e:
 	
 	# fit model
-	params = [h_param]
+	params = [h_param, (SS, RR)]
 	params, history = fit_model(
 		K2,
 		params,
@@ -203,6 +204,8 @@ except Exception as e:
 		opt=optax.adamw(ETA),
 		start_time=T0
 	)
+	print(f"SS={float(params[-1][0])}, RR={float(params[-1][1])}")
+	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 	
 	# evaluate model
 	test_generator = batch_generator(test_x, test_y, BATCH_SIZE)

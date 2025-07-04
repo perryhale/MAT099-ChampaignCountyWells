@@ -29,10 +29,6 @@ K0, K1 = jax.random.split(jax.random.key(RNG_SEED))
 DX = 1000
 DY = DX
 DT = 24
-#K_SCALE = 1 # cm/hr
-K_SCALE = 100 # m/hr
-#K_SCALE = 36e4**-1 # m/s
-#K_SCALE = 24e-5 # km/day
 
 # data partitions
 EPOCHS = 10
