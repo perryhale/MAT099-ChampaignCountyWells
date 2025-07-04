@@ -11,7 +11,6 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 from sklearn.preprocessing import MinMaxScaler
 
-from library.data import unit_grid2_sample_fn
 from library.models.nn import *
 from library.visual import *
 
@@ -98,7 +97,7 @@ except Exception as e:
 		# project to unit hypercube
 		data_scaler = MinMaxScaler(feature_range=(0, 1))
 		data_scaler.fit(data_train)
-		data_scale_xytz = data_scaler.data_range_ / jnp.array([1., 1., 3600, 1.])
+		data_scale_xytz = data_scaler.data_range_ / jnp.array([1., 1., 3600, 1.]) # units (m, m, hr, m)
 		
 		data_train = data_scaler.transform(data_train)
 		data_val = data_scaler.transform(data_val)
@@ -127,46 +126,19 @@ except Exception as e:
 		print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 		
 		# initialise model+loss
-		h_param = init_dense_neural_network(K1, [3, 256, 256, 1])
-		h_fn = jax.vmap(lambda p,xyt: dense_neural_network(p, xyt, ha=jax.nn.relu)[0,0], in_axes=(None, 0)) # N x [0,1] x [0,1] x [0,1] -> N x [0,1]
-		# rr_param = init_dense_neural_network(K2, [3, 32, 32, 32, 1])
-		# rr_fn = h_fn
-		
-		def loss_3d_ground_water_flow(params, batch_xyt, scale_xytz):
-			"""
-			# loss = ||R||^2
-			# R = Ss * ∂h/∂t - ∇·(K ∇h) - Rr
-			# ∇h = (∂h/∂x, ∂h/∂y)
-			# https://en.wikipedia.org/wiki/Groundwater_flow_equation
-			# https://github.com/jax-ml/jax/issues/3022#issuecomment-2733591263
-			"""
-			
-			h_fn_mono = lambda xyt: h_fn(params[0], xyt[jnp.newaxis, :])[0]
-			h_fn_flux = lambda xyt: unit_grid2_sample_fn(k_crop, *xyt[:2]) * jax.grad(h_fn_mono)(xyt)[:2] * (scale_xytz[3] / scale_xytz[:2])
-			
-			# compute 3d groundwater flow terms
-			batch_dhdt = jax.vmap(lambda xyt: jax.grad(h_fn_mono)(xyt)[2] * (scale_xytz[3] / scale_xytz[2]))(batch_xyt)
-			batch_div_flux = jax.vmap(lambda xyt: jnp.sum(jnp.diag(jax.jacfwd(h_fn_flux)(xyt)[:2, :2]) / scale_xytz[:2]))(batch_xyt)
-			batch_ss = params[-1][0]
-			batch_rr = params[-1][1]
-			
-			# compute l2 of PDE residual
-			loss_darcyflow = batch_ss * batch_dhdt - batch_div_flux - batch_rr
-			loss = jnp.mean(loss_darcyflow**2)
-			
-			return loss
-		
-		def loss_fn(params, batch_xyt, batch_z):
-			
-			loss_batch = LAM_MSE * loss_mse(h_fn(params[0], batch_xyt), batch_z)
-			loss_phys = LAM_PHYS * loss_3d_ground_water_flow(params, batch_xyt, data_scale_xytz)
-			loss_reg = LAM_L2 * lp_norm(params, order=2)
-			loss = loss_batch + loss_phys + loss_reg
-			
-			return loss
+		params, h_fn, loss_fn = get_3d_groundwater_flow_model(
+			K1,
+			[3, 256, 256, 1],
+			data_scale_xytz,
+			k=k_crop,
+			ss=SS,
+			rr=RR,
+			lam_mse=LAM_MSE,
+			lam_phys=LAM_PHYS,
+			lam_l2=LAM_L2
+		)
 		
 		# fit model
-		params = [h_param, (SS, RR)]
 		params, history = fit_model(
 			K2,
 			params,

@@ -3,7 +3,11 @@ import jax
 import jax.numpy as jnp
 import optax
 from tqdm import tqdm
-from ..data import batch_generator
+
+from ..data import (
+	batch_generator,
+	unit_grid2_sample_fn
+)
 
 
 ### Neural Network
@@ -18,6 +22,7 @@ def init_glorot_uniform(key, shape, fan_in, fan_out):
 	limit = jnp.sqrt(6) / jnp.sqrt(fan_in+fan_out)
 	w = jax.random.uniform(key, shape, minval=-limit, maxval=limit)
 	return w
+
 
 def init_dense_neural_network(key, layers):
 	"""
@@ -39,6 +44,7 @@ def init_dense_neural_network(key, layers):
 	
 	return list(map(tuple, zip(w_list, b_list)))
 
+
 def dense_neural_network(params, x, ha=jax.nn.sigmoid):
 	"""
 	# type: (List[Tuple[jnp.array]], jnp.array, jax.nn.[Activation functions]) -> jnp.array
@@ -59,12 +65,14 @@ def dense_neural_network(params, x, ha=jax.nn.sigmoid):
 	
 	return z
 
+
 def lp_norm(p, order=2):
 	"""
 	# type: (List[Tuple[jnp.array]], int) -> float
 	"""
 	assert order >= 1, "\"order\" must be greater than zero."
 	return jnp.sum(jnp.stack([jnp.sum(jnp.abs(leaf) ** order) for leaf in jax.tree_util.tree_leaves(p)])) ** (1.0 / order)
+
 
 def loss_cce(yh, y, e=1e-9):
 	"""
@@ -74,6 +82,7 @@ def loss_cce(yh, y, e=1e-9):
 	"""
 	return -jnp.mean(jnp.sum(y * jnp.log(yh + e), axis=-1))
 
+
 def loss_mse(yh, y):
 	"""
 	# type: (jnp.array, jnp.array, float) -> float
@@ -81,6 +90,7 @@ def loss_mse(yh, y):
 	# loss inR
 	"""
 	return jnp.mean((yh-y)**2)
+
 
 def accuracy_score(yh, y):
 	"""	
@@ -91,6 +101,7 @@ def accuracy_score(yh, y):
 	yc = jnp.argmax(y, axis=-1)
 	accuracy = jnp.mean(jnp.array(yhc==yc, dtype='int32'))
 	return accuracy
+
 
 def count_params(params):
 	"""
@@ -103,7 +114,18 @@ def count_params(params):
 		return jnp.sum(jnp.array([count_params(item) for item in params]))
 	return 0
 
-def fit_model(key, params, loss_fn, train_data, val_data=None, batch_size=64, epochs=1, opt=optax.sgd(1e-3), start_time=None):
+
+def fit_model(
+		key,
+		params,
+		loss_fn,
+		train_data,
+		val_data=None,
+		batch_size=64,
+		epochs=1,
+		opt=optax.sgd(1e-3),
+		start_time=None
+	):
 	"""
 	Docstring
 	"""
@@ -157,4 +179,58 @@ def fit_model(key, params, loss_fn, train_data, val_data=None, batch_size=64, ep
 		print(f"[Elapsed time: {time.time()-start_time:.2f}s] epoch={i+1}, train_loss={train_loss:.4f}, val_loss={val_loss:.4f}")
 	
 	return (params, history)
+
+
+def get_3d_groundwater_flow_model(
+		key,
+		layer_dims,
+		scale_xytz,
+		k=jnp.ones((1,1)),
+		ss=1e-1,
+		rr=1e-9,
+		lam_mse=1.0,
+		lam_phys=1.0,
+		lam_l2=0.0,
+		hidden_activation=jax.nn.relu
+	):
+	"""
+	Docstring
+	"""
 	
+	params = [init_dense_neural_network(key, layer_dims), (ss,rr)]
+	h_fn = jax.vmap(lambda p,xyt: dense_neural_network(p, xyt, ha=hidden_activation)[0,0], in_axes=(None, 0)) # N x [0,1] x [0,1] x [0,1] -> N x [0,1]
+	
+	def loss_3d_groundwater_flow(params, batch_xyt, scale_xytz):
+		"""
+		# loss = ||R||^2
+		# R = Ss * ∂h/∂t - ∇·(K ∇h) - Rr
+		# ∇h = (∂h/∂x, ∂h/∂y)
+		# https://en.wikipedia.org/wiki/Groundwater_flow_equation
+		# https://github.com/jax-ml/jax/issues/3022#issuecomment-2733591263
+		"""
+		
+		h_fn_mono = lambda xyt: h_fn(params[0], xyt[jnp.newaxis, :])[0]
+		h_fn_flux = lambda xyt: unit_grid2_sample_fn(k, *xyt[:2]) * jax.grad(h_fn_mono)(xyt)[:2] * (scale_xytz[3] / scale_xytz[:2])
+		
+		# compute 3d groundwater flow terms
+		batch_dhdt = jax.vmap(lambda xyt: jax.grad(h_fn_mono)(xyt)[2] * (scale_xytz[3] / scale_xytz[2]))(batch_xyt)
+		batch_div_flux = jax.vmap(lambda xyt: jnp.sum(jnp.diag(jax.jacfwd(h_fn_flux)(xyt)[:2, :2]) / scale_xytz[:2]))(batch_xyt)
+		batch_ss = params[-1][0]
+		batch_rr = params[-1][1]
+		
+		# compute l2 of PDE residual
+		loss_darcyflow = batch_ss * batch_dhdt - batch_div_flux - batch_rr
+		loss = jnp.mean(loss_darcyflow**2)
+		
+		return loss
+	
+	def loss_fn(params, batch_xyt, batch_z):
+		
+		loss_batch = lam_mse * loss_mse(h_fn(params[0], batch_xyt), batch_z)
+		loss_phys = lam_phys * loss_3d_groundwater_flow(params, batch_xyt, scale_xytz)
+		loss_reg = lam_l2 * lp_norm(params, order=2)
+		loss = loss_batch + loss_phys + loss_reg
+		
+		return loss
+	
+	return (params, h_fn, loss_fn)
