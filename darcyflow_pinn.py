@@ -50,7 +50,7 @@ LAM_L2 = 0.0
 
 # physical constants (default)
 SS = 1e-1
-RR = 0.
+RR = 0.0
 
 # sampling
 SAMPLE_XMIN = 0#-2
@@ -107,7 +107,7 @@ data_test = data_points[shuffle_idx[n_val:n_test]]
 # project to unit hypercube
 data_scaler = MinMaxScaler(feature_range=(0, 1))
 data_scaler.fit(data_train)
-scale_xytz = data_scaler.data_range_ / jnp.array([1., 1., 3600, 1.])
+data_scale_xytz = data_scaler.data_range_ / jnp.array([1., 1., 3600, 1.])
 
 data_train = data_scaler.transform(data_train)
 data_val = data_scaler.transform(data_val)
@@ -169,7 +169,7 @@ def loss_3d_ground_water_flow(params, batch_xyt, scale_xytz):
 def loss_fn(params, batch_xyt, batch_z):
 	
 	loss_batch = LAM_MSE * loss_mse(h_fn(params[0], batch_xyt), batch_z)
-	loss_phys = LAM_PHYS * loss_3d_ground_water_flow(params, batch_xyt, scale_xytz)
+	loss_phys = LAM_PHYS * loss_3d_ground_water_flow(params, batch_xyt, data_scale_xytz)
 	loss_reg = LAM_L2 * lp_norm(params, order=2)
 	loss = loss_batch + loss_phys + loss_reg
 	
