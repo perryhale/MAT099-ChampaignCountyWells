@@ -207,6 +207,7 @@ def get_3d_groundwater_flow_model(
 		# ∇h = (∂h/∂x, ∂h/∂y)
 		# https://en.wikipedia.org/wiki/Groundwater_flow_equation
 		# https://github.com/jax-ml/jax/issues/3022#issuecomment-2733591263
+		# (with scaling)
 		"""
 		
 		h_fn_mono = lambda xyt: h_fn(params[0], xyt[jnp.newaxis, :])[0]

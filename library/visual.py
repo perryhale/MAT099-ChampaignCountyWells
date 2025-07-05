@@ -29,7 +29,7 @@ def animate_hydrology(
 	):
 	
 	# init plot
-	fig, ax = plt.subplots(figsize=(8,8))
+	fig, ax = plt.subplots(figsize=(4,4))
 	if cbar and (k is not None):
 		k_colbar = fig.colorbar(ax.imshow(k, cmap=cmap_k), label=cbar_label, fraction=0.03, pad=0.03)
 	
@@ -77,11 +77,12 @@ def animate_hydrology(
 					ax.text(x, y-0.015, f'({x:.2f}, {y:.2f})', color='red', fontsize=8, ha='center', zorder=999)
 		
 		# draw h
-		h_contour = ax.contour(h_time[t], levels=isolines, cmap=cmap_contour, extent=grid_extent, origin=origin)
+		h_contour = ax.contourf(h_time[t], levels=isolines, cmap=cmap_contour, extent=grid_extent, origin=origin, alpha=0.5, zorder=0)
 		h_contour_labels = ax.clabel(h_contour, inline=True, fontsize=8, colors='red', fmt=clabel_fmt)
+		for txt in h_contour_labels:
+			txt.set_alpha(1.0)
 		#for label in h_contour_labels:
 		#	label.set_bbox(dict(facecolor='white', edgecolor='white', boxstyle='square,pad=0.1'))
-		
 	
 	# render animation
 	ani = animation.FuncAnimation(fig, update, frames=len(h_time)-frame_skip, interval=frame_interval)

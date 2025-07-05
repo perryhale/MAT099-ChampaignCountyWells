@@ -60,8 +60,8 @@ SAMPLE_YMIN = 0#-2
 SAMPLE_YMAX = 1#+3
 SAMPLE_YRES = 0 ###! 0 -> inherit k shape
 SAMPLE_TMIN = 0
-SAMPLE_TMAX = 1. / PART_TRAIN
-SAMPLE_TRES = 100
+SAMPLE_TMAX = 2.6
+SAMPLE_TRES = 260
 SAMPLE_BATCH = False
 
 
@@ -270,14 +270,14 @@ animate_hydrology(
 	grid_extent=(axis_x.min(), axis_x.max(), axis_y.min(), axis_y.max()),
 	draw_box=(0,0,1,1),
 	draw_k_in_box=True,
-	cmap_contour='binary',
+	cmap_contour='Blues_r',#'binary',
 	axis_ticks=True,
 	origin=None,
-	isolines=25,
+	isolines=10,
 	scatter_data=data_scatter.T,
 	title_fn=lambda t: f"t={axis_t[t]:.2f}",
 	clabel_fmt='%d',
-#	save_path="DFRPINN_PRECISE_SURFACE_2T_5Y_5X.webm"
+	save_path="Figure_4.mp4"
 )
 print("Closed plot")
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")
