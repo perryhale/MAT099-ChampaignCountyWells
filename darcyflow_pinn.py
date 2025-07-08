@@ -49,7 +49,7 @@ LAM_PHYS = 1.0
 LAM_L2 = 0.0
 
 # physical constants (default)
-SS = 1e-1
+SS = 1e-5
 RR = 0.0
 
 # sampling
