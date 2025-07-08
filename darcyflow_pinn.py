@@ -11,11 +11,7 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 from sklearn.preprocessing import MinMaxScaler
 
-from library.data import (
-	batch_generator,
-	batch_generator_mono,
-	unit_grid2_sample_fn
-)
+from library.data import batch_generator
 from library.models.nn import *
 from library.visual import *
 
@@ -193,32 +189,14 @@ except Exception as e:
 	axis_x = jnp.linspace(SAMPLE_XMIN, SAMPLE_XMAX, k_crop.shape[1] if (SAMPLE_XRES==0) else SAMPLE_XRES)
 	axis_y = jnp.linspace(SAMPLE_YMIN, SAMPLE_YMAX, k_crop.shape[0] if (SAMPLE_YRES==0) else SAMPLE_YRES)
 	axis_t = jnp.linspace(SAMPLE_TMIN, SAMPLE_TMAX, SAMPLE_TRES)
-	
-	sample_points = jnp.stack(jnp.meshgrid(axis_t, axis_y, axis_x, indexing='ij')[::-1], axis=-1).reshape(-1, 3)
-	if SAMPLE_BATCH:
-		sample_generator = batch_generator_mono(sample_points, BATCH_SIZE)
-		sample_steps = math.ceil(len(sample_points) / BATCH_SIZE)
-		h_sim = jnp.concatenate([h_fn(params[0], next(sample_generator)) for _ in range(sample_steps)])
-	else:
-		h_sim = h_fn(params[0], sample_points)
-	h_sim = data_scaler.data_min_[3] + h_sim * data_scaler.data_range_[3]
-	h_sim = h_sim.reshape(len(axis_t), len(axis_y), len(axis_x))
-	
+	h_sim = sample_3d_model(h_fn, params[0], axis_t, axis_y, axis_x, batch_size=None, translate=(data_scaler.data_min_[3], data_scaler.data_range_[3]))
 	print(f"h_sim.shape={h_sim.shape}")
 	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 	
 	# create cache
 	with open(W_CACHE, 'wb') as f:
-		pickle.dump(dict(
-			params=params,
-			history=history,
-			sample=dict(
-				axis_x=axis_x,
-				axis_y=axis_y,
-				axis_t=axis_t,
-				h_sim=h_sim
-			)
-		), f)
+		pickle.dump(dict(history=history, params=params, sample=dict(axis_x=axis_x, axis_y=axis_y, axis_t=axis_t, h_sim=h_sim)), f)
+	
 	print(f"Saved \"{W_CACHE}\"")
 	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 

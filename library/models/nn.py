@@ -6,6 +6,7 @@ from tqdm import tqdm
 
 from ..data import (
 	batch_generator,
+	batch_generator_mono,
 	unit_grid2_sample_fn
 )
 
@@ -235,3 +236,25 @@ def get_3d_groundwater_flow_model(
 		return loss
 	
 	return (params, h_fn, loss_fn)
+
+
+def sample_3d_model(model, param, axis_t, axis_y, axis_x, batch_size=None, translate=None):
+	"""
+	Docstring
+	"""
+	
+	input_points = jnp.stack(jnp.meshgrid(axis_t, axis_y, axis_x, indexing='ij')[::-1], axis=-1).reshape(-1, 3)
+	if batch_size is None:
+		sample = model(param, input_points)
+	else:
+		input_generator = batch_generator_mono(input_points, batch_size)
+		input_steps = jnp.ceil(len(input_points) / batch_size)
+		sample = jnp.concatenate([model(param, next(input_generator)) for _ in range(input_steps)])
+	
+	if translate is not None:
+		sample = translate[0] + sample * translate[1]
+	
+	sample = sample.reshape(len(axis_t), len(axis_y), len(axis_x))
+	
+	return sample
+

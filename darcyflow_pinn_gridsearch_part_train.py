@@ -95,14 +95,18 @@ def trial_fn(data_points, part_train, part_val, k0, batch_size, k1, k_crop, ss, 
 	
 	# initialise model+loss
 	params, h_fn, loss_fn = get_3d_groundwater_flow_model(
-		k1, [3, 256, 256, 1], data_scale_xytz, k_crop, ss, rr, lam_mse, lam_phys, lam_l2
+		k1, [3, 256, 256, 1], data_scale_xytz,
+		k_crop, ss, rr,
+		lam_mse, lam_phys, lam_l2
 	)
 	print(f"count_params(params)={count_params(params)}")
 	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 	
 	# fit model
 	params, history = fit_model(
-		k2, params, loss_fn, (train_x, train_y, train_steps), (val_x, val_y, val_steps), batch_size, epochs, optax.adamw(eta), T0
+		k2, params, loss_fn,
+		(train_x, train_y, train_steps), (val_x, val_y, val_steps),
+		batch_size, epochs, optax.adamw(eta), T0
 	)
 	print(f"SS={float(params[-1][0])}, RR={float(params[-1][1])}")
 	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
