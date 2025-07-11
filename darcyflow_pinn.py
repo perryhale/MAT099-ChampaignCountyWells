@@ -255,7 +255,7 @@ animate_hydrology(
 	scatter_data=data_scatter.T,
 	title_fn=lambda t: f"t={axis_t[t]:.2f}",
 	clabel_fmt='%d',
-	save_path="Figure_4.mp4"
+#	save_path="Figure_4.mp4"
 )
 print("Closed plot")
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")

@@ -71,9 +71,8 @@ except FileNotFoundError as e:
 	# 3. Get 'HYDRAULIC_HEAD_FT' column by subtracting depth to water from land surface over sealevel
 	data_filtered['HYDRAULIC_HEAD_FT'] = data_filtered['LS_ELEV_FT'] - data_filtered['DTW_FT_Reviewed']
 	
-	# 4. Convert date-strings to integer epoch seconds, set start to zero
-	data_filtered['TIMESTAMP'] = data_filtered['TIMESTAMP'].map(lambda usd_str: int(datetime.datetime.strptime(usd_str, "%m/%d/%Y").timestamp()))
-	data_filtered['TIMESTAMP'] = data_filtered['TIMESTAMP'] - data_filtered['TIMESTAMP'].min()
+	# 4. Convert date-strings to integer epoch seconds
+	data_filtered['TIMESTAMP'] = data_filtered['TIMESTAMP'].map(lambda us_date: int(datetime.datetime.strptime(us_date, "%m/%d/%Y").timestamp()))
 	
 	# 5. Average readings on the same day 'TIMESTAMP' from the same well 'P_NUMBER', cleanup types after averaging
 	data_filtered['UNIQUE_ID'] = data_filtered['P_NUMBER'] + data_filtered['TIMESTAMP']
@@ -83,8 +82,8 @@ except FileNotFoundError as e:
 	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 	
 	# convert units
-	data_filtered_metric = pd.DataFrame(data_filtered[['UNIQUE_ID', 'P_NUMBER', 'TIMESTAMP', 'LONG_NAD_83','LAT_NAD_83']])
-	data_filtered_metric[['X_EPSG_6350','Y_EPSG_6350']] = data_filtered_metric[['LONG_NAD_83', 'LAT_NAD_83']].apply(lambda row : pd.Series(transform_fn(*row)), axis=1)
+	data_filtered_metric = pd.DataFrame(data_filtered[['UNIQUE_ID', 'P_NUMBER', 'TIMESTAMP']])
+	data_filtered_metric[['X_EPSG_6350','Y_EPSG_6350']] = data_filtered[['LONG_NAD_83', 'LAT_NAD_83']].apply(lambda row : pd.Series(transform_fn(*row)), axis=1)
 	data_filtered_metric['HYDRAULIC_HEAD_M'] = data_filtered['HYDRAULIC_HEAD_FT'] / 3.281 # 3.281ft ~= 1m
 	print(data_filtered_metric)
 	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
