@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 
 
-def resolve_coords(string):
+def resolve_coord_xyt(string):
 	try:
 		return [tuple(map(float, xyt)) for xyt in re.findall(r'\(\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^)]+?)\s*\)', string)]
 	except Exception:
@@ -41,42 +41,44 @@ def expert_system(h_param, h_fn, trend_res=250):
 		for c in ";'[]-=_+!@#$%^&/*~`<>?|:\"{}":
 			query = query.replace(c,' ')
 		words = query.split()
-		coords = jnp.array(resolve_coords(query))
+		coord_xyt = jnp.array(resolve_coord_xyt(query))
 		
 		if resolve_vocab_match(words, vocab_a0):
 			print(f"A: Thank you for using the Champaign County Wells Expert System.")
 			loop_active = False
 		
-		elif resolve_vocab_match(words, vocab_a1) and (coords.shape[0]>0):
-			z_pred = h_fn(h_param, coords)
-			for c,z in zip(coords, z_pred):
+		elif resolve_vocab_match(words, vocab_a1) and (len(coord_xyt) > 0):
+			
+			coord_z = h_fn(h_param, coord_xyt)
+			for c,z in zip(coord_xyt, coord_z):
 				print(f"A: At {c} the water level is {z:.2f}.")
 			
-			resolve_a2 = resolve_vocab_match(words, vocab_a2)
-			resolve_a3 = resolve_vocab_match(words, vocab_a3)
-			if any([resolve_a2, resolve_a3]):
-				for i, zi in enumerate(z_pred):
-					for j, zj in enumerate(z_pred):
-						if j > i:
-							if resolve_a2:
-								print(f"A: The change (z1-z0) in water level between {coords[i]} and {coords[j]} is {zj-zi:.2f}.") 
-							if resolve_a3:
-								trend_axis = jnp.linspace(0, 1, trend_res)
-								trend_xyt = jnp.array([coords[i] + t * (coords[j] - coords[i]) for t in trend_axis])
-								trend_z = h_fn(h_param, trend_xyt)
-								print(f"A: Between {coords[i]} and {coords[j]}, the mean is {trend_z.mean():.4f} and the variance is {trend_z.var():.4f}. The trend is <figure>.")
-								fig = plt.figure(figsize=(10, 6))
-								gs = gridspec.GridSpec(2, 2, width_ratios=[4, 1], height_ratios=[1, 0], wspace=0.2, hspace=0.05)
-								ax_main = plt.subplot(gs[0, 0])
-								ax_main.plot(trend_axis, trend_z)
-								ax_main.set_ylabel("Water level")
-								ax_xtick_inc = int(trend_res*0.2)
-								ax_main.set_xticks(trend_axis[::ax_xtick_inc], [f"({x:.1f},{y:.1f},{t:.1f})" for x,y,t in trend_xyt[::ax_xtick_inc]])
-								ax_main.grid()
-								ax_hist = plt.subplot(gs[0, 1], sharey=ax_main)
-								ax_hist.hist(trend_z, bins=100, orientation='horizontal', color='gray', alpha=0.7)
-								ax_hist.set_xticks([])
-								plt.show()
+			if (len(coord_xyt) > 1):
+				
+				if resolve_vocab_match(words, vocab_a2):
+					for i in range(len(coord_xyt)):
+						for j in range(i+1, len(coord_xyt)):
+							print(f"A: The change (z1-z0) in water level between {coord_xyt[i]} and {coord_xyt[j]} is {coord_z[j]-coord_z[i]:.2f}.")
+				
+				if resolve_vocab_match(words, vocab_a3):
+					for i in range(len(coord_xyt)):
+						for j in range(i+1, len(coord_xyt)):
+							trend_axis = jnp.linspace(0, 1, trend_res)
+							trend_xyt = jnp.array([coord_xyt[i] + t * (coord_xyt[j] - coord_xyt[i]) for t in trend_axis])
+							trend_z = h_fn(h_param, trend_xyt)
+							print(f"A: Between {coord_xyt[i]} and {coord_xyt[j]}, the mean is {trend_z.mean():.4f} and the variance is {trend_z.var():.4f}. The trend is <figure>.")
+							fig = plt.figure(figsize=(10, 6))
+							gs = gridspec.GridSpec(2, 2, width_ratios=[4, 1], height_ratios=[1, 0], wspace=0.2, hspace=0.05)
+							ax_main = plt.subplot(gs[0, 0])
+							ax_main.plot(trend_axis, trend_z)
+							ax_main.set_ylabel("Water level")
+							ax_xtick_inc = int(trend_res*0.2)
+							ax_main.set_xticks(trend_axis[::ax_xtick_inc], [f"({x:.1f},{y:.1f},{t:.1f})" for x,y,t in trend_xyt[::ax_xtick_inc]])
+							ax_main.grid()
+							ax_hist = plt.subplot(gs[0, 1], sharey=ax_main)
+							ax_hist.hist(trend_z, bins=100, orientation='horizontal', color='grey', alpha=0.7)
+							ax_hist.set_xticks([])
+							plt.show()
 		
 		else:
 			print("A: Sorry, I don't understand. Can you rephrase your question?")
