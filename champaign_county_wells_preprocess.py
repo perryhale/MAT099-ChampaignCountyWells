@@ -88,7 +88,6 @@ except FileNotFoundError as e:
 	print(data_filtered_metric)
 	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 	
-	
 	# convert "long format" data to pivot table of well readings over time
 	data_surface = data_filtered_metric.pivot(index='TIMESTAMP', columns='P_NUMBER', values='HYDRAULIC_HEAD_M').ffill()
 	data_surface = data_surface.bfill() # or dropna

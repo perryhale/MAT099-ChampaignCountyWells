@@ -28,6 +28,6 @@ with open(W_CACHE, 'rb') as f:
 	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 # run expert
-expert_system(h_param, h_fn, tr_xytz=[(0,1), (0,1), (0,1), (data_scaler.data_min_[3], data_scaler.data_range_[3])])
+expert_system(h_param, h_fn, translate=[(0,1), (0,1), (0,1), (data_scaler.data_min_[3], data_scaler.data_range_[3])])
 print("Closed Expert")
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")
