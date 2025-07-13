@@ -15,7 +15,7 @@ def resolve_vocab_match(words, vocab):
 	return all([any([w in v for w in words]) for v in vocab])
 
 
-def expert_system(h_param, h_fn, trend_res=250):
+def expert_system(h_param, h_fn, tr_xytz=[(0,1)]*4, trend_res=250):
 	
 	print("+======++======++======++======++======+")
 	print("||Champaign County Wells Expert System||")
@@ -29,6 +29,8 @@ def expert_system(h_param, h_fn, trend_res=250):
 	vocab_a1 = ["what, whats, know, see, understand, want, wants, show, tell, get, find, estimate, how, hows, where, wheres".split(", ")]
 	vocab_a2 = [vocab_a1[0], "change, changes, changed, difference, differences".split(", ")]
 	vocab_a3 = [vocab_a1[0], "trend, trends".split(", ")]
+	
+	tr_xytz = jnp.array(tr_xytz)
 	
 	loop_active = True
 	while loop_active:
@@ -49,7 +51,7 @@ def expert_system(h_param, h_fn, trend_res=250):
 		
 		elif resolve_vocab_match(words, vocab_a1) and (len(coord_xyt) > 0):
 			
-			coord_z = h_fn(h_param, coord_xyt)
+			coord_z = tr_xytz[3,0] + h_fn(h_param, (coord_xyt - tr_xytz[:3,0]) / tr_xytz[:3,1]) * tr_xytz[3,1]
 			for c,z in zip(coord_xyt, coord_z):
 				print(f"A: At {c} the water level is {z:.2f}.")
 			
@@ -65,7 +67,7 @@ def expert_system(h_param, h_fn, trend_res=250):
 						for j in range(i+1, len(coord_xyt)):
 							trend_axis = jnp.linspace(0, 1, trend_res)
 							trend_xyt = jnp.array([coord_xyt[i] + t * (coord_xyt[j] - coord_xyt[i]) for t in trend_axis])
-							trend_z = h_fn(h_param, trend_xyt)
+							trend_z = tr_xytz[3,0] + h_fn(h_param, (trend_xyt - tr_xytz[:3,0]) / tr_xytz[:3,1]) * tr_xytz[3,1]
 							print(f"A: Between {coord_xyt[i]} and {coord_xyt[j]}, the mean is {trend_z.mean():.4f} and the variance is {trend_z.var():.4f}. The trend is <figure>.")
 							fig = plt.figure(figsize=(10, 6))
 							gs = gridspec.GridSpec(2, 2, width_ratios=[4, 1], height_ratios=[1, 0], wspace=0.2, hspace=0.05)

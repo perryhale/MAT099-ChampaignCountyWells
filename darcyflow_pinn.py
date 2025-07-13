@@ -83,6 +83,12 @@ for i in range(0, data_surface.shape[0], 1):
 
 data_points = jnp.array(data_points)
 
+###! 
+# M_CACHE = 'cache/data_filtered_metric.csv'
+# data_filtered_metric = pd.read_csv(M_CACHE)
+# data_filtered_metric = data_filtered_metric.dropna()
+# data_points = data_filtered_metric[['X_EPSG_6350', 'Y_EPSG_6350', 'TIMESTAMP', 'HYDRAULIC_HEAD_M']].to_numpy()
+
 # partition data
 # n_data = len(data_points)
 # shuffle_idx = jax.random.permutation(K0, n_data)
@@ -149,6 +155,7 @@ params, h_fn, loss_fn = get_3d_groundwater_flow_model(
 try:
 	with open(W_CACHE, 'rb') as f:
 		w_cache = pickle.load(f)
+		data_scaler = w_cache['data_scaler']
 		history = w_cache['history']
 		params = w_cache['params']
 		axis_x = w_cache['sample']['axis_x']
@@ -189,13 +196,14 @@ except Exception as e:
 	axis_x = jnp.linspace(SAMPLE_XMIN, SAMPLE_XMAX, k_crop.shape[1] if (SAMPLE_XRES==0) else SAMPLE_XRES)
 	axis_y = jnp.linspace(SAMPLE_YMIN, SAMPLE_YMAX, k_crop.shape[0] if (SAMPLE_YRES==0) else SAMPLE_YRES)
 	axis_t = jnp.linspace(SAMPLE_TMIN, SAMPLE_TMAX, SAMPLE_TRES)
-	h_sim = sample_3d_model(h_fn, params[0], axis_t, axis_y, axis_x, batch_size=None, translate=(data_scaler.data_min_[3], data_scaler.data_range_[3]))
+	h_sim = sample_3d_model(h_fn, params[0], axis_t, axis_y, axis_x, batch_size=None)
+	h_sim = data_scaler.data_min_[3] + h_sim * data_scaler.data_range_[3]
 	print(f"h_sim.shape={h_sim.shape}")
 	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 	
 	# create cache
 	with open(W_CACHE, 'wb') as f:
-		pickle.dump(dict(history=history, params=params, sample=dict(axis_x=axis_x, axis_y=axis_y, axis_t=axis_t, h_sim=h_sim)), f)
+		pickle.dump(dict(data_scaler=data_scaler, history=history, params=params, sample=dict(axis_x=axis_x, axis_y=axis_y, axis_t=axis_t, h_sim=h_sim)), f)
 	
 	print(f"Saved \"{W_CACHE}\"")
 	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
