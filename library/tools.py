@@ -1,7 +1,8 @@
+import time
 import re
 import jax
 import jax.numpy as jnp
-import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt; plt.style.use('classic')
 import matplotlib.gridspec as gridspec
 from library.models.nn import sample_3d_model
 from library.visual import animate_hydrology
@@ -15,6 +16,45 @@ def resolve_coord_xyt(string):
 
 def resolve_vocab_match(string, vocab):
 	return any([w in string for w in vocab])
+
+
+def print_in_box(text, segment_width=8, max_width=56):
+	
+	segment = f"+{'=' * (segment_width-2)}+"
+	top_border = segment * (max_width // len(segment))
+	print(top_border)
+	
+	for line in text.splitlines():
+		trimmed = line.strip()
+		padding = len(top_border) - len(trimmed) - 4
+		left_pad = padding // 2
+		right_pad = padding - left_pad
+		print(f"||{' ' * left_pad}{trimmed}{' ' * right_pad}||")
+	
+	print(top_border)
+
+def print_word_overflow(string, width=64, delay=1/120):
+	
+	words = string.split(' ')
+	column = 0
+	
+	for i in range(len(words)-1):
+		
+		print(words[i], end=" ", flush=True)
+		column += len(words[i])+1
+		
+		if (column+len(words[i+1]) >= width):
+			print()
+			column = 0
+		
+		if delay > 0:
+			time.sleep(delay)
+	
+	print(words[-1])
+
+def vec_to_string(arr, sep=",", d=2):
+	value_str = sep.join([f'{v:.{d}f}' for v in arr])
+	return f"({value_str})"
 
 
 def expert_system(h_param, h_fn, vocab=None, translate=[(0,1)]*4, res_trend=250, res_vis=(10,10,100), unit=""):
@@ -33,12 +73,16 @@ def expert_system(h_param, h_fn, vocab=None, translate=[(0,1)]*4, res_trend=250,
 	
 	translate = jnp.array(translate)
 	
-	print("+======++======++======++======++======+")
-	print("||Champaign County Wells Expert System||")
-	print("+======++======++======++======++======+")
+	print_in_box("Champaign County\nWells Expert System")
 	print()
-	print(f"Hello my name is WES Champaign, I'm an expert system intended to answer your questions about Champaign's water table. How can I help today?")
-	#print("Try asking me a question. If you're unfamiliar with the actions possible within this portal, you can ask for help at any time.")
+	print_word_overflow(' '.join([
+		"Hello my name is WES Champaign, I'm an expert system intended to answer your questions about Champaign's water table.",
+		"I use a 3d coordinate system for positions on the ground in time (x,y,t).",
+		"You can ask me about the height of the water level and about the change and trend in-between the water levels at any coordinates.",
+		"You can also ask me to visualise the 3D volume bound in-between any coordinates.",
+		"If you'd like to leave at any time, just say bye or exit.",
+		"How can I help today?"
+	]))
 	print()
 	
 	while True:
@@ -53,7 +97,7 @@ def expert_system(h_param, h_fn, vocab=None, translate=[(0,1)]*4, res_trend=250,
 			query = query.replace(c,' ')
 		
 		if resolve_vocab_match(query, vocab['exit']):
-			print(f"A: Thank you for using the Champaign County Wells Expert System.")
+			print_word_overflow(f"A: Thank you for using the Champaign County Wells Expert System.")
 			break
 		
 		else:
@@ -62,32 +106,36 @@ def expert_system(h_param, h_fn, vocab=None, translate=[(0,1)]*4, res_trend=250,
 				
 				coord_z = translate[3,0] + h_fn(h_param, (coord_xyt - translate[:3,0]) / translate[:3,1]) * translate[3,1]
 				for xyt,z in zip(coord_xyt, coord_z):
-					print(f"A: At {xyt} the water level is {z:.2f}{unit}.")
+					print_word_overflow(f"A: At {vec_to_string(xyt)} the water level is {z:.2f}{unit}.")
 				
 				if (len(coord_xyt) > 1):
 					
 					if resolve_vocab_match(query, vocab['change']):
 						for i in range(len(coord_xyt)):
 							for j in range(i+1, len(coord_xyt)):
-								print(f"A: The change (z1-z0) in water level between {coord_xyt[i]} and {coord_xyt[j]} is {coord_z[j]-coord_z[i]:.2f}{unit}.")
+								c0 = coord_xyt[i]
+								c1 = coord_xyt[j]
+								print_word_overflow(f"A: The change (z1-z0) in water level between {vec_to_string(c0)} and {vec_to_string(c1)} is {coord_z[j]-coord_z[i]:.2f}{unit}.")
 					
 					if resolve_vocab_match(query, vocab['trend']):
 						for i in range(len(coord_xyt)):
 							for j in range(i+1, len(coord_xyt)):
 								
+								c0 = coord_xyt[i]
+								c1 = coord_xyt[j]
 								trend_axis = jnp.linspace(0, 1, res_trend)
-								trend_xyt = jnp.array([coord_xyt[i] + t * (coord_xyt[j] - coord_xyt[i]) for t in trend_axis])
+								trend_xyt = jnp.array([c0 + t * (c1 - c0) for t in trend_axis])
 								trend_z = translate[3,0] + h_fn(h_param, (trend_xyt - translate[:3,0]) / translate[:3,1]) * translate[3,1]
 								
-								print(f"A: Between {coord_xyt[i]} and {coord_xyt[j]}, the mean is {trend_z.mean():.4f}{unit} and the variance is {trend_z.var():.4f}{unit}. The trend is <figure>.")
+								print_word_overflow(f"A: Between {vec_to_string(c0)} and {vec_to_string(c1)}, the mean is {trend_z.mean():.2f}{unit} and the variance is {trend_z.var():.2f}{unit}. The trend is <plot>.")
 								
-								fig = plt.figure(figsize=(10, 6))
+								fig = plt.figure(figsize=(7, 4))
 								gs = gridspec.GridSpec(2, 2, width_ratios=[4, 1], height_ratios=[1, 0], wspace=0.2, hspace=0.05)
 								ax_main = plt.subplot(gs[0, 0])
 								ax_main.plot(trend_axis, trend_z)
 								ax_main.set_ylabel("Water level" + f"({unit})" if unit!="" else "")
-								ax_xtick_inc = int(res_trend/5)
-								ax_main.set_xticks(trend_axis[::ax_xtick_inc], [f"({x:.1f},{y:.1f},{t:.1f})" for x,y,t in trend_xyt[::ax_xtick_inc]])
+								ax_xtick_inc = int(res_trend/3)
+								ax_main.set_xticks(trend_axis[::ax_xtick_inc], [vec_to_string(v, d=1) for v in trend_xyt[::ax_xtick_inc]])
 								ax_main.grid()
 								ax_hist = plt.subplot(gs[0, 1], sharey=ax_main)
 								ax_hist.hist(trend_z, bins=100, orientation='horizontal', color='grey', alpha=0.7)
@@ -108,7 +156,7 @@ def expert_system(h_param, h_fn, vocab=None, translate=[(0,1)]*4, res_trend=250,
 								axis_t = (jnp.linspace(c_tmin, c_tmax, res_vis[2]) - translate[2,0]) / translate[2,1]
 								sample_z =  translate[3,0] + sample_3d_model(h_fn, h_param, axis_t, axis_y, axis_x, batch_size=None) * translate[3,1]
 								
-								print(f"A: Here's a visualisation of the area bounded by {c0} and {c1}: <figure>.")
+								print_word_overflow(f"A: Here's a visualisation of the volume bounded by {vec_to_string(c0)} and {vec_to_string(c1)}: <plot>.")
 								
 								animate_hydrology(
 									sample_z,
@@ -122,6 +170,6 @@ def expert_system(h_param, h_fn, vocab=None, translate=[(0,1)]*4, res_trend=250,
 								)
 			
 			else:
-				print("A: Sorry, I don't understand. Can you rephrase your question? Make sure to provide 3d coordinates (x,y,t) in decimal format.")
+				print_word_overflow("A: Sorry, I don't understand. Can you rephrase your question? Make sure to provide 3d coordinates (x,y,t) in decimal format.")
 		
 		print()
