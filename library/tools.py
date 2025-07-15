@@ -8,11 +8,11 @@ from library.models.nn import sample_3d_model
 from library.visual import animate_hydrology
 
 
+PATTERN_COORD_XYT = re.compile(r'\(\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\)') # match for signed 3-tuples (a,b,c)
+
+
 def resolve_coord_xyt(string):
-	try:
-		return [tuple(map(float, xyt)) for xyt in re.findall(r'\(\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^)]+?)\s*\)', string)]
-	except Exception:
-		return []
+	return [tuple(map(float, xyt)) for xyt in PATTERN_COORD_XYT.findall(string)]
 
 def resolve_vocab_match(string, vocab):
 	return any([w in string for w in vocab])
@@ -33,20 +33,18 @@ def print_in_box(text, segment_width=8, max_width=56):
 	
 	print(top_border)
 
-def print_word_overflow(string, width=64, delay=1/120):
+def print_word_overflow(string, width=64, delay=1/120, newline=" "*3):
 	
 	words = string.split(' ')
 	column = 0
 	
 	for i in range(len(words)-1):
-		
 		print(words[i], end=" ", flush=True)
 		column += len(words[i])+1
-		
 		if (column+len(words[i+1]) >= width):
 			print()
-			column = 0
-		
+			print(newline, end="")
+			column = len(newline)
 		if delay > 0:
 			time.sleep(delay)
 	
@@ -61,11 +59,11 @@ def expert_system(h_param, h_fn, vocab=None, translate=[(0,1)]*4, res_trend=250,
 	
 	if vocab is None:
 		vocab = {
-			'punct': ";'[]-=_+!@#$%^&/*~`<>?|:\"{}",
+			'punct': ";'[]=_+!@#$%^&/*~`<>?|:\"{}",
 			'exit': "exit, bye, nevermind".split(", "),
 			'change': "change, difference".split(", "),
-			'trend': ["trend"],
-			'visual': ["visual"]
+			'trend': "trend, line".split(", "),
+			'visual': "visual, volume".split(", ")
 		}
 	else:
 		required_keys = "punct, exit, change, trend, visual".split(", ")
@@ -75,14 +73,15 @@ def expert_system(h_param, h_fn, vocab=None, translate=[(0,1)]*4, res_trend=250,
 	
 	print_in_box("Champaign County\nWells Expert System")
 	print()
-	print_word_overflow(' '.join([
+	print_word_overflow(" ".join([
 		"Hello my name is WES Champaign, I'm an expert system intended to answer your questions about Champaign's water table.",
-		"I use a 3d coordinate system for positions on the ground in time (x,y,t).",
-		"You can ask me about the height of the water level and about the change and trend in-between the water levels at any coordinates.",
+		"I use a 3D coordinate system for positions on the ground in time (x,y,t).",
+		"You can ask me about the height of the water level at any coordinates and about both the change and trend in-between the water levels at any coordinates.",
 		"You can also ask me to visualise the 3D volume bound in-between any coordinates.",
+		"If you're asking about lines or volumes (that's trends and visuals) then I'll also report the mean and variance.",
 		"If you'd like to leave at any time, just say bye or exit.",
 		"How can I help today?"
-	]))
+	]), newline="")
 	print()
 	
 	while True:
@@ -127,7 +126,10 @@ def expert_system(h_param, h_fn, vocab=None, translate=[(0,1)]*4, res_trend=250,
 								trend_xyt = jnp.array([c0 + t * (c1 - c0) for t in trend_axis])
 								trend_z = translate[3,0] + h_fn(h_param, (trend_xyt - translate[:3,0]) / translate[:3,1]) * translate[3,1]
 								
-								print_word_overflow(f"A: Between {vec_to_string(c0)} and {vec_to_string(c1)}, the mean is {trend_z.mean():.2f}{unit} and the variance is {trend_z.var():.2f}{unit}. The trend is <plot>.")
+								print_word_overflow(" ".join([
+									f"A: Here's the trend on the line between {vec_to_string(c0)} and {vec_to_string(c1)}: <figure>.",
+									f"On this line the mean is {trend_z.mean():.2f}{unit} and the variance is {trend_z.var():.2f}{unit}."
+								]))
 								
 								fig = plt.figure(figsize=(7, 4))
 								gs = gridspec.GridSpec(2, 2, width_ratios=[4, 1], height_ratios=[1, 0], wspace=0.2, hspace=0.05)
@@ -156,7 +158,10 @@ def expert_system(h_param, h_fn, vocab=None, translate=[(0,1)]*4, res_trend=250,
 								axis_t = (jnp.linspace(c_tmin, c_tmax, res_vis[2]) - translate[2,0]) / translate[2,1]
 								sample_z =  translate[3,0] + sample_3d_model(h_fn, h_param, axis_t, axis_y, axis_x, batch_size=None) * translate[3,1]
 								
-								print_word_overflow(f"A: Here's a visualisation of the volume bounded by {vec_to_string(c0)} and {vec_to_string(c1)}: <plot>.")
+								print_word_overflow(" ".join([
+									f"A: Here's a visualisation of the volume bound by {vec_to_string(c0)} and {vec_to_string(c1)}: <figure>.",
+									f"Within this volume the mean is {sample_z.mean():.2f}{unit} and the variance is {sample_z.var():.2f}{unit}."
+								]))
 								
 								animate_hydrology(
 									sample_z,
@@ -170,6 +175,6 @@ def expert_system(h_param, h_fn, vocab=None, translate=[(0,1)]*4, res_trend=250,
 								)
 			
 			else:
-				print_word_overflow("A: Sorry, I don't understand. Can you rephrase your question? Make sure to provide 3d coordinates (x,y,t) in decimal format.")
+				print_word_overflow("A: Sorry, I don't understand. Can you rephrase your question? Make sure to provide 3D coordinates (x,y,t) in decimal format.")
 		
 		print()
