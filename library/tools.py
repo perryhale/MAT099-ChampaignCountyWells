@@ -8,7 +8,7 @@ from library.models.nn import sample_3d_model
 from library.visual import animate_hydrology
 
 
-PATTERN_COORD_XYT = re.compile(r'\(\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\)') # match for signed 3-tuples (a,b,c)
+PATTERN_COORD_XYT = re.compile(r'\(\s*(-?\d*\.?\d+)\s*,\s*(-?\d*\.?\d+)\s*,\s*(-?\d*\.?\d+)\s*\)') # match for signed 3-tuples (a,b,c)
 
 
 def resolve_coord_xyt(string):
@@ -77,7 +77,7 @@ def expert_system(h_param, h_fn, vocab=None, translate=[(0,1)]*4, res_trend=250,
 		"Hello my name is WES Champaign, I'm an expert system intended to answer your questions about Champaign's water table.",
 		"I use a 3D coordinate system for positions on the ground in time (x,y,t).",
 		"You can ask me about the height of the water level at any coordinates and about both the change and trend in-between the water levels at any coordinates.",
-		"You can also ask me to visualise the 3D volume bound in-between any coordinates.",
+		"You can also ask me to visualise the 3D volume bound by any coordinates.",
 		"If you're asking about lines or volumes (that's trends and visuals) then I'll also report the mean and variance.",
 		"If you'd like to leave at any time, just say bye or exit.",
 		"How can I help today?"
@@ -175,6 +175,10 @@ def expert_system(h_param, h_fn, vocab=None, translate=[(0,1)]*4, res_trend=250,
 								)
 			
 			else:
-				print_word_overflow("A: Sorry, I don't understand. Can you rephrase your question? Make sure to provide 3D coordinates (x,y,t) in decimal format.")
+				print_word_overflow(" ".join([
+					"A: Sorry, I don't understand.",
+					"Can you rephrase your question?",
+					"Make sure to provide 3D coordinates (x,y,t) in decimal format.",
+				]))
 		
 		print()
