@@ -59,7 +59,7 @@ def expert_system(h_param, h_fn, vocab=None, transform=[(0,1)]*4, res_trend=250,
 	
 	if vocab is None:
 		vocab = {
-			'punct': ";'[]=_+!@#$%^&/*~`<>?|:\"{}",
+			'punct': list(";'[]=_+!@#$%^&/*~`<>?|:\"{}"),
 			'exit': "exit, bye, nevermind".split(", "),
 			'change': "change, difference".split(", "),
 			'trend': "trend, line".split(", "),
@@ -67,7 +67,8 @@ def expert_system(h_param, h_fn, vocab=None, transform=[(0,1)]*4, res_trend=250,
 		}
 	else:
 		required_keys = "punct, exit, change, trend, visual".split(", ")
-		assert required_keys in list(vocab.keys()), f"Provided vocab dictionary must specify {required_keys}."
+		assert all([key in list(vocab.keys()) for key in required_keys]), f"Provided vocab dictionary must specify {required_keys}."
+		assert all([type(x)==list and type(x[0])==str for x in vocab.values()]), "Provided vocab dictionary values must be type list<str>."
 	
 	transform = jnp.array(transform)
 	
