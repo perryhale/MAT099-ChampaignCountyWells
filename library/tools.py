@@ -8,7 +8,7 @@ from library.models.nn import sample_3d_model
 from library.visual import animate_hydrology
 
 
-PATTERN_COORD_XYT = re.compile(r'\(\s*(-?\d*\.?\d+)\s*,\s*(-?\d*\.?\d+)\s*,\s*(-?\d*\.?\d+)\s*\)') # match for signed 3-tuples (a,b,c)
+PATTERN_COORD_XYT = re.compile(r'\(\s*(-?(?:\d+\.\d*|\.\d+|\d+))\s*,\s*(-?(?:\d+\.\d*|\.\d+|\d+))\s*,\s*(-?(?:\d+\.\d*|\.\d+|\d+))\s*\)') # match for signed 3-tuples (a,b,c) including leading/trailing full-stop
 
 
 def resolve_coord_xyt(string):
