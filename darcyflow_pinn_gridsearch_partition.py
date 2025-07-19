@@ -8,6 +8,7 @@ import optax
 
 import pandas as pd
 import matplotlib.pyplot as plt; plt.style.use('classic')
+import matplotlib.patches as patches
 from tqdm import tqdm
 from sklearn.preprocessing import MinMaxScaler
 
@@ -34,6 +35,7 @@ K0, K1, K2 = jax.random.split(jax.random.key(RNG_SEED), 3)
 EPOCHS = 2
 BATCH_SIZE = 64
 PART_VAL = 0.05
+PART_TEST = 0.25
 
 # optimizer
 ETA = 1e-4
@@ -48,16 +50,21 @@ RR = 0.0
 
 ### functions
 
-def trial_fn(data_points, part_train, part_val, k0, batch_size, k1, k_crop, ss, rr, lam_mse, lam_phys, lam_l2, k2, epochs, eta):
+def trial_fn(data_points, part_train, k0, batch_size, k1, k_crop, ss, rr, lam_mse, lam_phys, lam_l2, k2, epochs, eta):
 	
-	part_test = 1 - part_val - part_train
+	part_buffer = 1 - part_train - PART_VAL - PART_TEST
+	assert (part_buffer >= 0 or part_buffer <= 1)
 	
-	# partition data with train/val-test split in time order, shuffling val and test together
+	# partition data with train/val-test split in time order, shuffling
+	# val and test together - cutting train from earliest samples and
+	# val+test from the latest samples.
 	n_data = data_points.shape[0]
 	n_train = int(part_train * n_data)
-	n_val = int(part_val * n_data)
-	n_test = int(part_test * n_data)
-	shuffle_idx = n_train + jax.random.permutation(k0, n_val + n_test)
+	n_val = int(PART_VAL * n_data)
+	n_test = int(PART_TEST * n_data)
+	n_buffer = int(part_buffer * n_data)
+	
+	shuffle_idx = n_train + n_buffer + jax.random.permutation(k0, n_val + n_test)
 	data_train = data_points[:n_train]
 	data_val = data_points[shuffle_idx[:n_val]]
 	data_test = data_points[shuffle_idx[n_val:]]
@@ -95,8 +102,8 @@ def trial_fn(data_points, part_train, part_val, k0, batch_size, k1, k_crop, ss, 
 	
 	# initialise model+loss
 	params, h_fn, loss_fn = get_3d_groundwater_flow_model(
-		k1, [3, 256, 256, 1], data_scale_xytz,
-		k_crop, ss, rr,
+		k1, [3, 256, 256, 1],
+		data_scale_xytz, k_crop, ss, rr,
 		lam_mse, lam_phys, lam_l2
 	)
 	print(f"count_params(params)={count_params(params)}")
@@ -130,6 +137,43 @@ def trial_fn(data_points, part_train, part_val, k0, batch_size, k1, k_crop, ss, 
 	return history
 
 
+def plot_data_partitions(part_train, title="", scale=1):
+	
+	part_buffer = 1 - part_train - PART_VAL - PART_TEST
+	assert 0 <= part_buffer <= 1
+	
+	lefts = [l*scale for l in [0,
+			 part_train,
+			 part_train + part_buffer,
+			 part_train + part_buffer + PART_VAL]]
+	widths = [l*scale for l in [part_train, part_buffer, PART_VAL, PART_TEST]]
+	colors = ['blue', 'grey', 'red', 'green']
+	labels = ['Train', 'Buffer', 'Val', 'Test']
+	
+	fig, ax = plt.subplots(figsize=(8, 3))
+	
+	for left, width, color, label in list(zip(lefts, widths, colors, labels))[:2]:
+		if width > 0:
+			ax.add_patch(patches.Rectangle((left, 0), width, scale, color=color, label=label))
+	
+	ax.add_patch(patches.Rectangle((lefts[2], 0), sum(widths[2:]), scale, label='+'.join(labels[2:]),
+		facecolor=colors[3],
+		edgecolor=colors[2],
+		hatch='/',
+		linewidth=1
+	))
+	
+	ax.set_xlim(0, scale)
+	ax.set_ylim(0, scale)
+	ax.set_yticks([])
+	ax.set_xticks([l*scale for l in [0, part_train, part_train + part_buffer, 1]])
+	ax.set_xlabel(title)
+	ax.legend(loc='upper center', bbox_to_anchor=(0.5, 1.15), ncol=4)
+	
+	plt.tight_layout()
+	plt.show()
+
+
 ### main
 
 # load cache
@@ -158,18 +202,17 @@ except Exception as e:
 		for j in range(0, data_surface.shape[1]-1, 1):
 			xytz = (*data_wells[j], data_surface[i][0], data_surface[i][j+1]) # xytz
 			data_points.append(xytz)
-
+	
 	data_points = jnp.array(data_points)
 	
-	# gridsearch over train ratio in 5% increments, fixing val ratio to 5%
-	# and alloting remaining portion to test set, ensuring no set is ever 
-	# less than 5% of the full set
-	axis_part = jnp.arange(0.05, 0.95, 0.05)
+	# define trial axis
+	axis_part = jnp.arange(0.05, 0.75, 0.05)
 	axis_history = []
 	
+	# determine losses for each trial with physics loss
 	for part_train in axis_part:
 		history = trial_fn(
-			data_points, part_train, PART_VAL, K0, BATCH_SIZE, K1, k_crop, SS, RR, LAM_MSE, LAM_PHYS, LAM_L2, K2, EPOCHS, ETA
+			data_points, part_train, K0, BATCH_SIZE, K1, k_crop, SS, RR, LAM_MSE, LAM_PHYS, LAM_L2, K2, EPOCHS, ETA
 		)
 		axis_history.append(history)
 		print(f"*** Completed trial: part_train={part_train:.2f} ***")
@@ -180,9 +223,10 @@ except Exception as e:
 			print(f"Saved \"{G_CACHE}\"")
 			print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 	
+	# determine losses for each trial without physics loss
 	for part_train in axis_part:
 		history = trial_fn(
-			data_points, part_train, PART_VAL, K0, BATCH_SIZE, K1, k_crop, SS, RR, LAM_MSE, 0.0, LAM_L2, K2, EPOCHS, ETA
+			data_points, part_train, K0, BATCH_SIZE, K1, k_crop, SS, RR, LAM_MSE, 0.0, LAM_L2, K2, EPOCHS, ETA
 		)
 		axis_history.append(history)
 		print(f"*** Completed trial: part_train={part_train:.2f} ***")
@@ -193,21 +237,28 @@ except Exception as e:
 			print(f"Saved \"{G_CACHE}\"")
 			print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
-# plot rmse over ratio
+# plot rmse over part_train
 n_trials = len(axis_part)
 n_days = len(data_surface)
-val_days = int(PART_VAL * n_days)
 axis_part_days = jnp.astype(n_days * axis_part, 'int32')
+val_days = int(PART_VAL * n_days)
+test_days = int(PART_TEST * n_days)
 axis_test_rmse = [history['test_rmse'] for history in axis_history]
 
-fig, ax = plt.subplots(figsize=(4,6))
+fig, ax = plt.subplots(figsize=(7,5))
 ax.plot(axis_part_days, axis_test_rmse[:n_trials], c='darkgreen', label="PINN")
 ax.plot(axis_part_days, axis_test_rmse[n_trials:], c='darkred', linestyle='dashed', label="MSE")
 ax.legend()
 ax.set_ylabel("Test RMSE (Metres)")
 ax.set_xlabel("Num. days in [Train:Test] sets")
-ax.set_xticks(axis_part_days[::3], [f"{train_days}:{n_days-val_days-train_days}" for train_days in axis_part_days[::3]])
+ax.set_xticks(axis_part_days[::3], [f"{train_days}:{test_days}" for train_days in axis_part_days[::3]])
 ax.grid()
-ax.show()
+plt.show()
+print("Closed plot")
+print(f"[Elapsed time: {time.time()-T0:.2f}s]")
+
+# plot partition scheme
+trial_idx = 4
+plot_data_partitions(axis_part[trial_idx], title=f"Data partition in days\nTest RMSE={axis_test_rmse[trial_idx][0]:.2f}m", scale=n_days)
 print("Closed plot")
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")

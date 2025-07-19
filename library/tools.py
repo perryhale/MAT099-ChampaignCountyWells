@@ -76,7 +76,7 @@ def expert_system(h_param, h_fn, vocab=None, transform=[(0,1)]*4, res_trend=250,
 	print()
 	print_word_overflow(" ".join([
 		"Hello my name is WES Champaign, I'm an expert system intended to answer your questions about Champaign's water table.",
-		"I use a 3D coordinate system for positions on the ground in time (x,y,t).",
+		"I use a 3D cartesian coordinate system for positions on the ground in time (x,y,t).",
 		"You can ask me about the height of the water level at any coordinates and about both the change and trend in-between the water levels at any coordinates.",
 		"You can also ask me to visualise the 3D volume bound by any coordinates.",
 		"If you're asking about lines or volumes (that's trends and visuals) then I'll also report the mean and variance.",
