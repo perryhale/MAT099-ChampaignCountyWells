@@ -50,10 +50,7 @@ RR = 0.0
 
 ### functions
 
-def trial_fn(data_points, part_train, k0, batch_size, k1, k_crop, ss, rr, lam_mse, lam_phys, lam_l2, k2, epochs, eta):
-	
-	part_buffer = max(0, 1 - part_train - PART_VAL - PART_TEST) ###! max is patch to avoid non-zero values from float imprecision
-	assert part_buffer < 1
+def trial_fn(data_points, part_buffer, part_train, k0, batch_size, k1, k_crop, ss, rr, lam_mse, lam_phys, lam_l2, k2, epochs, eta):
 	
 	# partition respecting time-series, shuffle val+test together
 	n_data = data_points.shape[0]
@@ -135,10 +132,7 @@ def trial_fn(data_points, part_train, k0, batch_size, k1, k_crop, ss, rr, lam_ms
 	return history
 
 
-def plot_data_partitions(part_train, title="", scale=1):
-	
-	part_buffer = max(0, 1 - part_train - PART_VAL - PART_TEST)
-	assert part_buffer < 1
+def plot_data_partition(part_buffer, part_train, title="", scale=1, shuffle_val_test=True, buffer_all=True):
 	
 	lefts = [l*scale for l in [
 		0,
@@ -156,16 +150,18 @@ def plot_data_partitions(part_train, title="", scale=1):
 	labels = ['Buffer', 'Train', 'Val', 'Test']
 	
 	fig, ax = plt.subplots(figsize=(8, 3))
-	
-	for left, width, color, label in list(zip(lefts, widths, colors, labels))[:2]:
-		ax.add_patch(patches.Rectangle((left, 0), width, scale, color=color, label=label))
-	
-	ax.add_patch(patches.Rectangle((lefts[2], 0), sum(widths[2:]), scale, label='+'.join(labels[2:]),
-		facecolor=colors[3],
-		edgecolor=colors[2],
-		hatch='/',
-		linewidth=1
-	))
+	ax.add_patch(patches.Rectangle((lefts[0], 0), scale if buffer_all else widths[0], scale, color=colors[0], label=labels[0]))
+	ax.add_patch(patches.Rectangle((lefts[1], 0), widths[1], scale, color=colors[1], label=labels[1]))
+	if shuffle_val_test:
+		ax.add_patch(patches.Rectangle((lefts[2], 0), sum(widths[2:]), scale, label='+'.join(labels[2:]),
+			facecolor=colors[3],
+			edgecolor=colors[2],
+			hatch='/',
+			linewidth=1
+		))
+	else:
+		ax.add_patch(patches.Rectangle((lefts[2], 0), widths[2], scale, color=colors[2], label=labels[2]))
+		ax.add_patch(patches.Rectangle((lefts[3], 0), widths[3], scale, color=colors[3], label=labels[3]))
 	
 	ax.set_xlim(0, scale)
 	ax.set_ylim(0, scale)
@@ -194,7 +190,7 @@ print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 # try cache
 try:
 	with open(G_CACHE, 'rb') as f:
-		axis_part, axis_history = pickle.load(f)
+		axis_lam_phys, axis_part_train, axis_part_buffer, trial_ax0 = pickle.load(f)
 		print(f"Loaded \"{G_CACHE}\"")
 		print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
@@ -210,44 +206,48 @@ except Exception as e:
 	data_points = jnp.array(data_points)
 	
 	# define trial axis
-	axis_part = jnp.arange(0.05, 0.75, 0.05)
-	axis_history = []
+	axis_lam_phys = [LAM_PHYS, 0.0]
+	axis_part_train = jnp.arange(0.05, 0.75, 0.05)
+	axis_part_buffer = lambda part_train: jnp.arange(0.00, max(0, 1 - part_train - PART_VAL - PART_TEST)+0.05, 0.05)
 	
-	# determine losses for each trial with physics loss
-	for part_train in axis_part:
-		history = trial_fn(
-			data_points, part_train, K0, BATCH_SIZE, K1, k_crop, SS, RR, LAM_MSE, LAM_PHYS, LAM_L2, K2, EPOCHS, ETA
-		)
-		axis_history.append(history)
-		print(f"*** Completed trial: part_train={part_train:.2f} ***")
-		print(f"[Elapsed time: {time.time()-T0:.2f}s]")
+	# determine results and store as linked list
+	trial_ax0 = []
+	for lam_phys in axis_lam_phys:
 		
-		with open(G_CACHE, 'wb') as f:
-			pickle.dump((axis_part, axis_history), f)
-			print(f"Saved \"{G_CACHE}\"")
-			print(f"[Elapsed time: {time.time()-T0:.2f}s]")
+		trial_ax1 = []
+		for part_train in axis_part_train:
+			
+			trial_ax2 = []
+			for part_buffer in axis_part_buffer(part_train):
+				
+				print(f"*** Trial: part_train={part_train:.2f}, part_buffer={part_buffer:.2f} ***")
+				print(f"[Elapsed time: {time.time()-T0:.2f}s]")
+				history = trial_fn(data_points, part_buffer, part_train, K0, BATCH_SIZE, K1, k_crop, SS, RR, LAM_MSE, lam_phys, LAM_L2, K2, EPOCHS, ETA)
+				print(f"[Elapsed time: {time.time()-T0:.2f}s]")
+				
+				trial_ax2.append(history)
+			
+			trial_ax1.append(trial_ax2)
+		
+		trial_ax0.append(trial_ax1)
 	
-	# determine losses for each trial without physics loss
-	for part_train in axis_part:
-		history = trial_fn(
-			data_points, part_train, K0, BATCH_SIZE, K1, k_crop, SS, RR, LAM_MSE, 0.0, LAM_L2, K2, EPOCHS, ETA
-		)
-		axis_history.append(history)
-		print(f"*** Completed trial: part_train={part_train:.2f} ***")
+	# save cache
+	with open(G_CACHE, 'wb') as f:
+		pickle.dump((axis_lam_phys, axis_part_train, axis_part_buffer, trial_ax0), f)
+		print(f"Saved \"{G_CACHE}\"")
 		print(f"[Elapsed time: {time.time()-T0:.2f}s]")
-		
-		with open(G_CACHE, 'wb') as f:
-			pickle.dump((axis_part, axis_history), f)
-			print(f"Saved \"{G_CACHE}\"")
-			print(f"[Elapsed time: {time.time()-T0:.2f}s]")
+
 
 # plot rmse over part_train
-n_trials = len(axis_part)
+
+trial_history = trial_ax0
+
+n_trials = len(axis_part_train)
 n_days = len(data_surface)
-axis_part_days = jnp.astype(n_days * axis_part, 'int32')
+axis_part_days = jnp.astype(n_days * axis_part_train, 'int32')
 val_days = int(PART_VAL * n_days)
 test_days = int(PART_TEST * n_days)
-axis_test_rmse = [history['test_rmse'] for history in axis_history]
+axis_test_rmse = [history['test_rmse'] for history in trial_history]
 
 fig, ax = plt.subplots(figsize=(7,5))
 ax.plot(axis_part_days, axis_test_rmse[:n_trials], c='darkgreen', label="PINN")
@@ -263,6 +263,7 @@ print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 # plot partition scheme
 trial_idx = 4
-plot_data_partitions(axis_part[trial_idx], title=f"Data partition in days\nTest RMSE={axis_test_rmse[trial_idx][0]:.2f}m", scale=n_days)
+part_buffer = max(0, 1 - axis_part_train[trial_idx] - PART_VAL - PART_TEST)
+plot_data_partition(part_buffer, axis_part_train[trial_idx], title=f"Data partition in days\nTest RMSE={axis_test_rmse[trial_idx][0]:.2f}m", scale=n_days)
 print("Closed plot")
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")
