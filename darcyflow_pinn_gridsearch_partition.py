@@ -52,20 +52,18 @@ RR = 0.0
 
 def trial_fn(data_points, part_train, k0, batch_size, k1, k_crop, ss, rr, lam_mse, lam_phys, lam_l2, k2, epochs, eta):
 	
-	part_buffer = 1 - part_train - PART_VAL - PART_TEST
-	assert (part_buffer >= 0 or part_buffer <= 1)
+	part_buffer = max(0, 1 - part_train - PART_VAL - PART_TEST) ###! max is patch to avoid non-zero values from float imprecision
+	assert part_buffer < 1
 	
-	# partition data with train/val-test split in time order, shuffling
-	# val and test together - cutting train from earliest samples and
-	# val+test from the latest samples.
+	# partition respecting time-series, shuffle val+test together
 	n_data = data_points.shape[0]
+	n_buffer = int(part_buffer * n_data)
 	n_train = int(part_train * n_data)
 	n_val = int(PART_VAL * n_data)
 	n_test = int(PART_TEST * n_data)
-	n_buffer = int(part_buffer * n_data)
 	
-	shuffle_idx = n_train + n_buffer + jax.random.permutation(k0, n_val + n_test)
-	data_train = data_points[:n_train]
+	shuffle_idx = n_buffer + n_train + jax.random.permutation(k0, n_val + n_test)
+	data_train = data_points[n_buffer:n_buffer+n_train]
 	data_val = data_points[shuffle_idx[:n_val]]
 	data_test = data_points[shuffle_idx[n_val:]]
 	
@@ -139,22 +137,28 @@ def trial_fn(data_points, part_train, k0, batch_size, k1, k_crop, ss, rr, lam_ms
 
 def plot_data_partitions(part_train, title="", scale=1):
 	
-	part_buffer = 1 - part_train - PART_VAL - PART_TEST
-	assert 0 <= part_buffer <= 1
+	part_buffer = max(0, 1 - part_train - PART_VAL - PART_TEST)
+	assert part_buffer < 1
 	
-	lefts = [l*scale for l in [0,
-			 part_train,
-			 part_train + part_buffer,
-			 part_train + part_buffer + PART_VAL]]
-	widths = [l*scale for l in [part_train, part_buffer, PART_VAL, PART_TEST]]
-	colors = ['blue', 'grey', 'red', 'green']
-	labels = ['Train', 'Buffer', 'Val', 'Test']
+	lefts = [l*scale for l in [
+		0,
+		part_buffer,
+		part_buffer + part_train,
+		part_buffer + part_train + PART_VAL
+	]]
+	widths = [l*scale for l in [
+		part_buffer,
+		part_train,
+		PART_VAL,
+		PART_TEST
+	]]
+	colors = ['grey', 'blue', 'red', 'green']
+	labels = ['Buffer', 'Train', 'Val', 'Test']
 	
 	fig, ax = plt.subplots(figsize=(8, 3))
 	
 	for left, width, color, label in list(zip(lefts, widths, colors, labels))[:2]:
-		if width > 0:
-			ax.add_patch(patches.Rectangle((left, 0), width, scale, color=color, label=label))
+		ax.add_patch(patches.Rectangle((left, 0), width, scale, color=color, label=label))
 	
 	ax.add_patch(patches.Rectangle((lefts[2], 0), sum(widths[2:]), scale, label='+'.join(labels[2:]),
 		facecolor=colors[3],
@@ -166,7 +170,7 @@ def plot_data_partitions(part_train, title="", scale=1):
 	ax.set_xlim(0, scale)
 	ax.set_ylim(0, scale)
 	ax.set_yticks([])
-	ax.set_xticks([l*scale for l in [0, part_train, part_train + part_buffer, 1]])
+	ax.set_xticks([l*scale for l in [0, part_buffer, part_buffer + part_train, 1]])#, [f"+{w:n}" for w in [0, widths[0], widths[1], sum(widths[2:])]])
 	ax.set_xlabel(title)
 	ax.legend(loc='upper center', bbox_to_anchor=(0.5, 1.15), ncol=4)
 	
