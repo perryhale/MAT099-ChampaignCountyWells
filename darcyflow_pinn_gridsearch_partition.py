@@ -47,6 +47,11 @@ LAM_L2 = 0.0
 SS = 1e-5
 RR = 0.0
 
+# trial axis
+AX_LAM_PHYS = jnp.array([LAM_PHYS, 0.0])
+AX_PART_TRAIN = jnp.arange(0.05, 0.75, 0.05)
+AX_PART_BUFFER_FN = lambda part_train: jnp.arange(0.00, max(0, 1 - part_train - PART_VAL - PART_TEST)+0.05, 0.05)
+
 
 ### functions
 
@@ -190,7 +195,7 @@ print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 # try cache
 try:
 	with open(G_CACHE, 'rb') as f:
-		axis_lam_phys, axis_part_train, axis_part_buffer, trial_ax0 = pickle.load(f)
+		trial_history_ax0 = pickle.load(f)
 		print(f"Loaded \"{G_CACHE}\"")
 		print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
@@ -205,57 +210,56 @@ except Exception as e:
 	
 	data_points = jnp.array(data_points)
 	
-	# define trial axis
-	axis_lam_phys = [LAM_PHYS, 0.0]
-	axis_part_train = jnp.arange(0.05, 0.75, 0.05)
-	axis_part_buffer = lambda part_train: jnp.arange(0.00, max(0, 1 - part_train - PART_VAL - PART_TEST)+0.05, 0.05)
-	
 	# determine results and store as linked list
-	trial_ax0 = []
-	for lam_phys in axis_lam_phys:
+	trial_history_ax0 = []
+	for lam_phys in AX_LAM_PHYS:
 		
-		trial_ax1 = []
-		for part_train in axis_part_train:
+		trial_history_ax1 = []
+		for part_train in AX_PART_TRAIN:
 			
-			trial_ax2 = []
-			for part_buffer in axis_part_buffer(part_train):
+			trial_history_ax2 = []
+			for part_buffer in AX_PART_BUFFER_FN(part_train):
 				
-				print(f"*** Trial: part_train={part_train:.2f}, part_buffer={part_buffer:.2f} ***")
-				print(f"[Elapsed time: {time.time()-T0:.2f}s]")
+				print(f"*** Trial: lam_phys={lam_phys:.2f}, part_train={part_train:.2f}, part_buffer={part_buffer:.2f} ***")
 				history = trial_fn(data_points, part_buffer, part_train, K0, BATCH_SIZE, K1, k_crop, SS, RR, LAM_MSE, lam_phys, LAM_L2, K2, EPOCHS, ETA)
+				history['metadata'] = dict(
+					lam_phys=lam_phys,
+					part_train=part_train,
+					part_buffer=part_buffer
+				)
 				print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 				
-				trial_ax2.append(history)
+				trial_history_ax2.append(history)
 			
-			trial_ax1.append(trial_ax2)
+			trial_history_ax1.append(trial_history_ax2)
 		
-		trial_ax0.append(trial_ax1)
+		trial_history_ax0.append(trial_history_ax1)
+		
+		# save cache
+		with open(G_CACHE, 'wb') as f:
+			pickle.dump(trial_history_ax0, f)
+			print(f"Saved \"{G_CACHE}\"")
+			print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 	
-	# save cache
-	with open(G_CACHE, 'wb') as f:
-		pickle.dump((axis_lam_phys, axis_part_train, axis_part_buffer, trial_ax0), f)
-		print(f"Saved \"{G_CACHE}\"")
-		print(f"[Elapsed time: {time.time()-T0:.2f}s]")
+	# cleanup
+	del data_points
+	del trial_history_ax1
+	del trial_history_ax2
+	del history
 
 
 # plot rmse over part_train
-
-trial_history = trial_ax0
-
-n_trials = len(axis_part_train)
 n_days = len(data_surface)
-axis_part_days = jnp.astype(n_days * axis_part_train, 'int32')
-val_days = int(PART_VAL * n_days)
 test_days = int(PART_TEST * n_days)
-axis_test_rmse = [history['test_rmse'] for history in trial_history]
+axis_train_days = jnp.astype(n_days * AX_PART_TRAIN, 'int32')
 
 fig, ax = plt.subplots(figsize=(7,5))
-ax.plot(axis_part_days, axis_test_rmse[:n_trials], c='darkgreen', label="PINN")
-ax.plot(axis_part_days, axis_test_rmse[n_trials:], c='darkred', linestyle='dashed', label="MSE")
+ax.plot(axis_train_days, [h_ax2[-1]['test_rmse'][0] for h_ax2 in trial_history_ax0[0]], c='darkgreen', label="PINN")
+ax.plot(axis_train_days, [h_ax2[-1]['test_rmse'][0] for h_ax2 in trial_history_ax0[1]], c='darkred', linestyle='dashed', label="MSE")
 ax.legend()
 ax.set_ylabel("Test RMSE (Metres)")
 ax.set_xlabel("Num. days in [Train:Test] sets")
-ax.set_xticks(axis_part_days[::3], [f"{train_days}:{test_days}" for train_days in axis_part_days[::3]])
+ax.set_xticks(axis_train_days[::3], [f"{train_days}:{test_days}" for train_days in axis_train_days[::3]])
 ax.grid()
 plt.show()
 print("Closed plot")
@@ -263,7 +267,10 @@ print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 # plot partition scheme
 trial_idx = 4
-part_buffer = max(0, 1 - axis_part_train[trial_idx] - PART_VAL - PART_TEST)
-plot_data_partition(part_buffer, axis_part_train[trial_idx], title=f"Data partition in days\nTest RMSE={axis_test_rmse[trial_idx][0]:.2f}m", scale=n_days)
+part_train = AX_PART_TRAIN[trial_idx]
+part_buffer = AX_PART_BUFFER_FN(part_train)[-1]
+test_rmse = trial_history_ax0[0][trial_idx][-1]['test_rmse'][0]
+
+plot_data_partition(part_buffer, part_train, title=f"Data partition in days\nTest RMSE={test_rmse:.2f}m", scale=n_days)
 print("Closed plot")
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")

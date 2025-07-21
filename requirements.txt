@@ -1,0 +1,12 @@
+jax==0.5.3
+matplotlib==3.10.3
+numpy==2.3.1
+optax==0.2.5
+pandas==2.3.1
+Pillow==11.3.0
+pyproj==3.7.1
+rasterio==1.4.3
+scikit_learn==1.7.1
+scipy==1.16.0
+Shapely==2.1.1
+tqdm==4.67.1
