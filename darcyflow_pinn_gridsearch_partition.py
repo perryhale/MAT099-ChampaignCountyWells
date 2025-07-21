@@ -175,8 +175,7 @@ def plot_data_partition(part_buffer, part_train, title="", scale=1, shuffle_val_
 	ax.set_xlabel(title)
 	ax.legend(loc='upper center', bbox_to_anchor=(0.5, 1.15), ncol=4)
 	
-	plt.tight_layout()
-	plt.show()
+	return fig, ax
 
 
 ### main
@@ -265,13 +264,20 @@ plt.show()
 print("Closed plot")
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
-# plot partition scheme
-idx_part_train = 4
-idx_part_buffer = 4
-part_train = AX_PART_TRAIN[idx_part_train]
-part_buffer = AX_PART_BUFFER_FN(part_train)[idx_part_buffer]
-test_rmse = trial_history_ax0[0][idx_part_train][idx_part_buffer]['test_rmse'][0]
+# plot all partition schemes
+frame_counter = 0
+for i, part_train in enumerate(AX_PART_TRAIN):
+	for j, part_buffer in enumerate(AX_PART_BUFFER_FN(part_train)):
+		
+		test_rmse = trial_history_ax0[0][i][j]['test_rmse'][0]
+		output_name = f"{__file__.replace('.py','')}_Figure_2_{frame_counter}.png"
+		
+		plot_data_partition(part_buffer, part_train, title=f"Data partition in days\nTest RMSE={test_rmse:.2f}m", scale=n_days)
+		plt.tight_layout()
+		plt.savefig(output_name)
+		plt.close()
+		frame_counter += 1
+		print(f"Saved \"{output_name}\"")
+		print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
-plot_data_partition(part_buffer, part_train, title=f"Data partition in days\nTest RMSE={test_rmse:.2f}m", scale=n_days)
-print("Closed plot")
-print(f"[Elapsed time: {time.time()-T0:.2f}s]")
+### bash: ffmpeg -framerate 15 -i darcyflow_pinn_gridsearch_partition_Figure_2_%d.png -c:v libx264 -preset veryslow -crf 0 -pix_fmt yuv444p out.mp4
