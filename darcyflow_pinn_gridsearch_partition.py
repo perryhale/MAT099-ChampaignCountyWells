@@ -254,10 +254,10 @@ test_days = int(PART_TEST * n_days)
 axis_train_days = jnp.astype(n_days * AX_PART_TRAIN, 'int32')
 
 fig, ax = plt.subplots(figsize=(7,5))
-ax.plot(axis_train_days, [h_ax2[-1]['test_rmse'][0] for h_ax2 in trial_history_ax0[0]], c='darkgreen', label="PINN")
-ax.plot(axis_train_days, [h_ax2[-1]['test_rmse'][0] for h_ax2 in trial_history_ax0[1]], c='darkred', linestyle='dashed', label="MSE")
+ax.plot(axis_train_days, [sum([h['test_rmse'][0] for h in h_ax2]) / len(h_ax2) for h_ax2 in trial_history_ax0[0]], c='darkgreen', label="PINN")
+ax.plot(axis_train_days, [sum([h['test_rmse'][0] for h in h_ax2]) / len(h_ax2) for h_ax2 in trial_history_ax0[1]], c='darkred', linestyle='dashed', label="MSE")
 ax.legend()
-ax.set_ylabel("Test RMSE (Metres)")
+ax.set_ylabel("Cross-validated test RMSE (Metres)")
 ax.set_xlabel("Num. days in [Train:Test] sets")
 ax.set_xticks(axis_train_days[::3], [f"{train_days}:{test_days}" for train_days in axis_train_days[::3]])
 ax.grid()
@@ -266,10 +266,11 @@ print("Closed plot")
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 # plot partition scheme
-trial_idx = 4
-part_train = AX_PART_TRAIN[trial_idx]
-part_buffer = AX_PART_BUFFER_FN(part_train)[-1]
-test_rmse = trial_history_ax0[0][trial_idx][-1]['test_rmse'][0]
+idx_part_train = 4
+idx_part_buffer = 4
+part_train = AX_PART_TRAIN[idx_part_train]
+part_buffer = AX_PART_BUFFER_FN(part_train)[idx_part_buffer]
+test_rmse = trial_history_ax0[0][idx_part_train][idx_part_buffer]['test_rmse'][0]
 
 plot_data_partition(part_buffer, part_train, title=f"Data partition in days\nTest RMSE={test_rmse:.2f}m", scale=n_days)
 print("Closed plot")
