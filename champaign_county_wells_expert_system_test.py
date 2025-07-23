@@ -11,9 +11,6 @@ from library.tools import *
 T0 = time.time()
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
-# cache path
-W_CACHE = 'cache/df_rpinn.pkl'
-
 
 ### functions
 
