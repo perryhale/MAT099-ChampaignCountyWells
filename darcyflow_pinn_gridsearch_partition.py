@@ -279,5 +279,3 @@ for i, part_train in enumerate(AX_PART_TRAIN):
 		frame_counter += 1
 		print(f"Saved \"{output_name}\"")
 		print(f"[Elapsed time: {time.time()-T0:.2f}s]")
-
-### bash: ffmpeg -framerate 15 -i darcyflow_pinn_gridsearch_partition_Figure_2_%d.png -c:v libx264 -preset veryslow -crf 0 -pix_fmt yuv444p out.mp4
