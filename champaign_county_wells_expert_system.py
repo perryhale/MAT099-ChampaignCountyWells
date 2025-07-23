@@ -3,7 +3,7 @@ import pickle
 import jax
 import jax.numpy as jnp
 from library.models.nn import dense_neural_network
-from library.tools import expert_system
+from library.tools import WellsExpertSystem
 
 
 ### setup
@@ -28,6 +28,7 @@ with open(W_CACHE, 'rb') as f:
 	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 # run expert
-expert_system(h_param, h_fn, transform=[(0,1), (0,1), (0,1), (data_scaler.data_min_[3], data_scaler.data_range_[3])], unit="m")
+expert_system = WellsExpertSystem(h_param, h_fn, transform=[(0,1), (0,1), (0,1), (data_scaler.data_min_[3], data_scaler.data_range_[3])], unit="m")
+expert_system.control_loop()
 print("Closed Expert")
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")
