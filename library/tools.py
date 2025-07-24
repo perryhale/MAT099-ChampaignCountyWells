@@ -2,8 +2,9 @@ import time
 import re
 import jax
 import jax.numpy as jnp
-import matplotlib.pyplot as plt; plt.style.use('classic')
+import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
+
 from library.models.nn import sample_3d_model
 from library.visual import animate_hydrology
 
@@ -208,8 +209,7 @@ class WellsExpertSystem():
 				if not self.testing: print_word_overflow(
 					f"A: Thank you for using the Champaign County Wells Expert System.",
 					width=self.width, delay=self.delay, newline=" "*3
-				)
-				print()
+				); print()
 				break
 			else:
 				self.respond(query)

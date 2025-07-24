@@ -16,7 +16,7 @@ print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 # type: () -> WellsExpertSystem
 def get_test_expert_system():
-	return WellsExpertSystem(None, lambda p,x: jnp.array([0.]*len(x)), testing=True)
+	return WellsExpertSystem(None, lambda p,x: jnp.zeros(len(x)), testing=True)
 
 # type: () -> bool
 def test_resolve_coord_xyt():
@@ -29,6 +29,7 @@ def test_resolve_coord_xyt():
 		("(1.2, 1, 0.1), (01.2,1,1)", [(1.2, 1.0, 0.1), (1.2, 1.0, 1.0)]),
 		("(1.2, 1, 0.1) and (01.2,1,1)", [(1.2, 1.0, 0.1), (1.2, 1.0, 1.0)]),
 		("(1.2, 1, 0.1)and(01.2,1,1)", [(1.2, 1.0, 0.1), (1.2, 1.0, 1.0)]),
+		("(ab, 1c, 0d.1)and(1.2,1.0,0.1)", [(1.2, 1.0, 0.1)]),
 		("abcd(a1,2,444)", []),
 		("(1,2)", []),
 		("(1,2 2, 4)", []),
@@ -80,7 +81,7 @@ def test_wells_expert_system_respond():
 	trials = [
 		"What is the water level at (0,0,0)?",
 		"What is the change in water level between (0,0,0) and (0,0,1)?",
-		"What is the trend in water level over (0,0,0) and (0,0,1)?",
+		"What is the trend in water level over (0,0,0) (0,0,1)?",
 		"Can you show me a visualisation of (0.75,0.75,0) to (1,1,1)?",
 		"This input does not contain any coordinates",
 		"This input contains malformed coordinates (a1,1,.1.)"

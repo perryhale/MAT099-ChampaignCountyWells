@@ -5,15 +5,15 @@ import pickle
 import jax
 import jax.numpy as jnp
 import optax
-
 import pandas as pd
 import matplotlib.pyplot as plt; plt.style.use('classic')
-import matplotlib.patches as patches
-from tqdm import tqdm
+from matplotlib.patches import Rectangle
 from sklearn.preprocessing import MinMaxScaler
+from tqdm import tqdm
 
-from library.models.nn import *
-from library.visual import *
+from library.models.nn import get_3d_groundwater_flow_model
+from library.models.metrics import count_params
+from library.models.util import fit_model
 
 
 ### setup
@@ -155,18 +155,18 @@ def plot_data_partition(part_buffer, part_train, title="", scale=1, shuffle_val_
 	labels = ['Buffer', 'Train', 'Val', 'Test']
 	
 	fig, ax = plt.subplots(figsize=(8, 3))
-	ax.add_patch(patches.Rectangle((lefts[0], 0), scale if buffer_all else widths[0], scale, color=colors[0], label=labels[0]))
-	ax.add_patch(patches.Rectangle((lefts[1], 0), widths[1], scale, color=colors[1], label=labels[1]))
+	ax.add_patch(Rectangle((lefts[0], 0), scale if buffer_all else widths[0], scale, color=colors[0], label=labels[0]))
+	ax.add_patch(Rectangle((lefts[1], 0), widths[1], scale, color=colors[1], label=labels[1]))
 	if shuffle_val_test:
-		ax.add_patch(patches.Rectangle((lefts[2], 0), sum(widths[2:]), scale, label='+'.join(labels[2:]),
+		ax.add_patch(Rectangle((lefts[2], 0), sum(widths[2:]), scale, label='+'.join(labels[2:]),
 			facecolor=colors[3],
 			edgecolor=colors[2],
 			hatch='/',
 			linewidth=1
 		))
 	else:
-		ax.add_patch(patches.Rectangle((lefts[2], 0), widths[2], scale, color=colors[2], label=labels[2]))
-		ax.add_patch(patches.Rectangle((lefts[3], 0), widths[3], scale, color=colors[3], label=labels[3]))
+		ax.add_patch(Rectangle((lefts[2], 0), widths[2], scale, color=colors[2], label=labels[2]))
+		ax.add_patch(Rectangle((lefts[3], 0), widths[3], scale, color=colors[3], label=labels[3]))
 	
 	ax.set_xlim(0, scale)
 	ax.set_ylim(0, scale)

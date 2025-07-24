@@ -3,11 +3,11 @@ import jax.numpy as jnp
 from tqdm import tqdm
 
 
-# type: (jnp.array, jnp.array, float, float, float, float, float) -> jnp.array
 @jax.jit
 def darcyflow_fdm_periodic(h, k, dt, dx, dy, ss, rr):
 	"""
 	Solved 2D Darcy Flow PDE using explicit FDM with periodic edge boundary conditions
+	
 	args:
 		h: jnp.array (nx, ny): Current hydraulic head
 		k: jnp.array (nx, ny): Hydraulic conductivity
@@ -26,10 +26,12 @@ def darcyflow_fdm_periodic(h, k, dt, dx, dy, ss, rr):
 	next_h = h + dt / ss * (k * laplacian + rr)
 	return next_h
 
+
 @jax.jit
 def darcyflow_fdm_neumann(h, k, dt, dx, dy, ss, rr):
 	"""
 	Solve 2D Darcy Flow PDE using explicit FDM with Neumann (zero-gradient) edge BCs
+	
 	args:
 		h: jnp.array (nx, ny): Current hydraulic head
 		k: jnp.array (nx, ny): Hydraulic conductivity
@@ -49,17 +51,22 @@ def darcyflow_fdm_neumann(h, k, dt, dx, dy, ss, rr):
 	next_h = h + dt / ss * (k * laplacian + rr)
 	return next_h
 
-# type: (jnp.array, float, float, float, float) -> float
+
 @jax.jit
 def cfl_value(k, dt, dx, dy, ss):
 	"""
-	Courant–Friedrichs–Lewy simulatoin stability value, typically must be less than 1/4.
-	arg: k: jnp.array: 2D array representing hydraulic conductivity
-	args: dt, dx, dy: float: Size of discretizations
-	arg: ss: float: Specific-storage coefficient
-	returns: float: CFL value
+	Courant–Friedrichs–Lewy simulation stability value.
+	Typically, < 1/4 required for stability.
+	
+	args:
+		k: jnp.array: 2D array representing hydraulic conductivity
+		dt, dx, dy: float: Size of discretizations
+		ss: float: Specific-storage coefficient
+	returns:
+		float: CFL value
 	"""
 	return jnp.max(k) * dt * (1 / dx**2 + 1 / dy**2) / ss
+
 
 # type: (jnp.array, jnp.array, jnp.array) -> jnp.array
 @jax.jit
@@ -67,7 +74,8 @@ def apply_dirichlet_bc(h, constraint_mask, constraint_values):
 	next_h = jnp.where(constraint_mask, constraint_values, h)
 	return next_h
 
-# type: (jnp.array, jnp.array, int, float, float, float, float, float, List[(jnp.array)->jnp.array]) -> List[jnp.array]
+
+# type: (jnp.array, jnp.array, int, float, float, float, float, float, list[(jnp.array)->jnp.array]) -> list[jnp.array]
 def simulate_hydraulic_surface_fdm(h, k, n_steps, dt, dx, dy, ss, rr, dirichlet_bcs="EDGE", solver=darcyflow_fdm_neumann):
 	
 	# assertions

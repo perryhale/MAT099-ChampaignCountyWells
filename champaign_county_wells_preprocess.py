@@ -11,9 +11,10 @@ from PIL import Image
 from tqdm import tqdm
 from matplotlib.patches import Rectangle
 
-from library.data import *
-from library.models.fdm import *
+from library.data.sampling import crop_raster
+from library.data.interpolation import interpolate_rbf_linear
 from library.visual import animate_hydrology, plot_surface3d
+
 
 ### setup
 
@@ -82,7 +83,7 @@ try:
 		k_crop = data_interpolated['k_crop']
 		k_crop_idx = data_interpolated['k_crop_idx']
 		crop_west_idx, crop_south_idx, crop_east_idx, crop_north_idx = k_crop_idx
-		h_time = data_interpolated['h_time']
+		h_rbfl = data_interpolated['h_rbfl']
 		data_wells = data_interpolated['data_wells']
 		grid_x = data_interpolated['grid_x']
 		grid_y = data_interpolated['grid_y']
@@ -94,7 +95,7 @@ try:
 		print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 		print(f"k_crop.shape={k_crop.shape}")
 		print(f"k_crop_idx={k_crop_idx}")
-		print(f"h_time.shape={h_time.shape}")
+		print(f"h_rbfl.shape={h_rbfl.shape}")
 		print(f"data_wells.shape={data_wells.shape}")
 		print(f"data_bound_n={data_bound_n}")
 		print(f"data_bound_s={data_bound_s}")
@@ -178,69 +179,9 @@ except FileNotFoundError:
 		np.linspace(data_bound_w, data_bound_e, k_crop.shape[1]),
 		np.linspace(data_bound_n, data_bound_s, k_crop.shape[0])
 	)
-	h_time = np.array([interp2d_lrbf(row, data_wells, grid_x, grid_y) for row in tqdm(data_surface.to_numpy(), desc="Interp")])
-	print(f"h_time.shape={h_time.shape}")
+	h_rbfl = np.array([interpolate_rbf_linear(row, data_wells, grid_x, grid_y) for row in tqdm(data_surface.to_numpy(), desc="Interp")])
+	print(f"h_rbfl.shape={h_rbfl.shape}")
 	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
-	
-	###! interpolate surface using linear simplex with constant boundary condition
-	#global_mean = data_surface.mean().mean() ###! using global mean down-task will cause information leak
-	#h_time = np.array([interp2d_ls(row, data_wells, grid_x, grid_y, const=global_mean) for row in tqdm(data_surface.to_numpy(), desc="Interp")])
-	
-	###! interpolate surface using Dirichlet constrained FDM equilibrium
-	# import matplotlib.pyplot as plt
-	# from library.visual import plot_surface3d
-	# solver = darcyflow_fdm_neumann
-	# (data_bound_w, data_bound_e, data_bound_s, data_bound_n) = (data_bound_w, data_bound_e, data_bound_n, data_bound_s)
-	# max_iter = 10_000
-	# dx = 1000
-	# dy = dx
-	# dt = 24
-	# ss = 1e-1#1.46e-1
-	# rr = 1e-7#7.41e-5
-	# def interpolate_fdm_constrained(solver, values, coords, (data_bound_w, data_bound_e, data_bound_s, data_bound_n), grid_shape, max_iter, k, dt, dx, dy, ss, rr):
-		# min_x, max_x, min_y, max_y = (data_bound_w, data_bound_e, data_bound_s, data_bound_n)
-		
-		# # define boundary condition
-		# dbc_mask = np.zeros(grid_shape, dtype='bool')
-		# dbc_vals = np.zeros(grid_shape, dtype='float')
-		# for (x,y),z in zip(coords, values):
-			# y_idx = int((y - min_y) / (max_y - min_y) * (dbc_mask.shape[0]-1))
-			# x_idx = int((x - min_x) / (max_x - min_x) * (dbc_mask.shape[1]-1))
-			# dbc_mask[y_idx, x_idx] = True
-			# dbc_vals[y_idx, x_idx] = z
-		
-		# # iterate solver
-		# grid_z = np.ones(grid_x.shape) * np.mean(values)#np.zeros(grid_x.shape)
-		# for i in range(max_iter):
-		# #for i in tqdm(range(max_iter)): ###! debug (tqdm)
-			# grid_z = solver(grid_z, k, dt, dx, dy, ss, rr)
-			# grid_z = apply_dirichlet_bc(grid_z, dbc_mask, dbc_vals)
-			# ###! debug
-			# # if (i % 250 == 0):
-				# # _ = plot_surface3d(grid_x, grid_y, grid_z, k=k)
-				# # plt.tight_layout()
-				# # plt.savefig(f"figures/{time.time()}.png")
-				# # plt.close()
-				# # plt.imshow(grid_z)
-				# # plt.colorbar()
-				# # plt.savefig(f"figures/{time.time()}.png")
-				# # plt.close()
-		
-		# ###! debug
-		# # _ = plot_surface3d(grid_x, grid_y, grid_z, k=k)
-		# # plt.tight_layout()
-		# # plt.savefig(f"figures/{time.time()}.png")
-		# # plt.close()
-		# # plt.imshow(grid_z)
-		# # plt.colorbar()
-		# # plt.savefig(f"figures/{time.time()}.png")
-		# # plt.close()
-		
-		# return grid_z
-	
-	# h_time = np.array([
-		# interpolate_fdm_constrained(solver, row, data_wells, (data_bound_w, data_bound_e, data_bound_s, data_bound_n), grid_x.shape, max_iter, k_crop, dt, dx, dy, ss, rr) for row in tqdm(data_surface.to_numpy(), desc="Interp")
-	# ])
 	
 	# create csv caches
 	outputs = [
@@ -259,7 +200,7 @@ except FileNotFoundError:
 		k_crop_idx=k_crop_idx,
 		grid_x=grid_x,
 		grid_y=grid_y,
-		h_time=h_time
+		h_rbfl=h_rbfl
 	)
 	print(f"Saved \"{I_CACHE}.npz\"")
 	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
@@ -295,9 +236,9 @@ if PLOT_DEBUG:
 	
 	# plot images
 	im01 = ax01.imshow(k_crop, cmap='viridis', extent=(data_bound_w, data_bound_e, data_bound_s, data_bound_n))
-	im02 = ax02.imshow(h_time[-1], cmap='Blues', extent=(data_bound_w, data_bound_e, data_bound_s, data_bound_n))
+	im02 = ax02.imshow(h_rbfl[-1], cmap='Blues', extent=(data_bound_w, data_bound_e, data_bound_s, data_bound_n))
 	im11 = ax11.imshow(k_crop, cmap='viridis', aspect='equal')
-	im12 = ax12.imshow(h_time[-1], cmap='Blues', aspect='equal')
+	im12 = ax12.imshow(h_rbfl[-1], cmap='Blues', aspect='equal')
 	
 	# scatter wells
 	for ax in row0:
@@ -318,7 +259,7 @@ if PLOT_DEBUG:
 # plot interpolated surface
 if PLOT_HYDRO:
 	animate_hydrology(
-		h_time,
+		h_rbfl,
 		k=k_crop,
 		grid_extent=(data_bound_w, data_bound_e, data_bound_s, data_bound_n),
 		scatter_data=data_wells.T,
@@ -359,5 +300,5 @@ if PLOT_KSAT:
 
 # static 3d surface plot
 if PLOT_3DSF:
-	fig, axis = plot_surface3d(grid_x, grid_y, h_time[5140-4042], k=k_crop)
+	fig, axis = plot_surface3d(grid_x, grid_y, h_rbfl[5140-4042], k=k_crop)
 	plt.show()

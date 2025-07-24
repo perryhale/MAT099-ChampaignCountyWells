@@ -2,6 +2,8 @@ import time
 import pickle
 import jax
 import jax.numpy as jnp
+import matplotlib.pyplot as plt; plt.style.use('classic')
+
 from library.models.nn import dense_neural_network
 from library.tools import WellsExpertSystem
 

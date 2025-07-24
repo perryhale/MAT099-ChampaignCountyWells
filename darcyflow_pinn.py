@@ -5,15 +5,15 @@ import pickle
 import jax
 import jax.numpy as jnp
 import optax
-
 import pandas as pd
 import matplotlib.pyplot as plt
-from tqdm import tqdm
 from sklearn.preprocessing import MinMaxScaler
+from tqdm import tqdm
 
-from library.data import batch_generator
-from library.models.nn import *
-from library.visual import *
+from library.data.pipeline import batch_generator
+from library.models.nn import get_3d_groundwater_flow_model
+from library.models.util import fit_model
+from library.visual import plot_surface3d, animate_hydrology
 
 
 ### setup
