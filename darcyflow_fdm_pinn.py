@@ -12,7 +12,7 @@ from library.models.nn import *
 from library.visual import animate_hydrology, plot_surface3d
 
 
-### Setup
+### setup
 
 # start timer
 T0 = time.time()
@@ -195,9 +195,6 @@ plt.text(
 )
 plt.grid()
 plt.show()
-
-
-### Auto-regressive simulation
 
 # simulate
 #h_init = jnp.ones(k_crop.shape)

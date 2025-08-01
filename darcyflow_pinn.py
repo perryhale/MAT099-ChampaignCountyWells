@@ -1,3 +1,4 @@
+import sys
 import time
 import math
 import pickle
@@ -11,7 +12,7 @@ from sklearn.preprocessing import MinMaxScaler
 from tqdm import tqdm
 
 from library.data.pipeline import batch_generator
-from library.models.nn import get_3d_groundwater_flow_model
+from library.models.nn import get_3d_groundwater_flow_model, sample_3d_model
 from library.models.util import fit_model
 from library.visual import plot_surface3d, animate_hydrology
 
@@ -26,27 +27,33 @@ print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 I_CACHE = 'cache/data_interpolated.npz'
 S_CACHE = 'cache/data_surface.csv'
 W_CACHE = 'cache/df_rpinn.pkl'
+CACHE_ENABLE = False
 
 # RNG setup
 RNG_SEED = 999
 K0, K1, K2 = jax.random.split(jax.random.key(RNG_SEED), 3)
 
-# data partitions
-EPOCHS = 2
-BATCH_SIZE = 64
+# data
+TRAIN_EPOCH = 2
+TRAIN_BATCH = 64
 PART_TRAIN = 0.75
 PART_VAL = 0.05
 PART_TEST = 0.20
 
-# optimizer
-ETA = 1e-4
-LAM_MSE = 1.0
-LAM_PHYS = 1.0
-LAM_L2 = 0.0
+# model
+MDL_LAYERS = [3, 256, 256, 1]
+MDL_HIDE_ACT = jax.nn.relu
 
-# physical constants (default)
-SS = 1e-5
-RR = 0.0
+# loss
+LAM_MSE = float(sys.argv[1]) if len(sys.argv) > 1 else 1.0
+LAM_PHYS = float(sys.argv[2]) if len(sys.argv) > 2 else 1.0
+LAM_L2 = float(sys.argv[3]) if len(sys.argv) > 3 else 0.0
+LAM_SS = 1e-5
+LAM_RR = 0.0
+
+# optimizer
+OPT = optax.adamw
+OPT_ETA = 1e-4
 
 # sampling
 SAMPLE_XMIN = 0#-2
@@ -109,7 +116,7 @@ data_test = data_points[shuffle_idx[n_val:n_test]]
 # project to unit hypercube
 data_scaler = MinMaxScaler(feature_range=(0, 1))
 data_scaler.fit(data_train)
-data_scale_xytz = data_scaler.data_range_ / jnp.array([1., 1., 3600, 1.]) # units (m, m, hr, m)
+data_scale_xytz = data_scaler.data_range_# / jnp.array([1., 1., 3600, 1.]) # units (m, m, hr, m)
 
 data_train = data_scaler.transform(data_train)
 data_val = data_scaler.transform(data_val)
@@ -121,9 +128,9 @@ val_x, val_y = data_val[:,:-1], data_val[:,-1]
 test_x, test_y = data_test[:,:-1], data_test[:,-1]
 
 # determine batch counts
-train_steps = math.ceil(train_x.shape[0] / BATCH_SIZE)
-val_steps = math.ceil(val_x.shape[0] / BATCH_SIZE)
-test_steps = math.ceil(test_x.shape[0] / BATCH_SIZE)
+train_steps = math.ceil(train_x.shape[0] / TRAIN_BATCH)
+val_steps = math.ceil(val_x.shape[0] / TRAIN_BATCH)
+test_steps = math.ceil(test_x.shape[0] / TRAIN_BATCH)
 
 # memory cleanup
 del shuffle_idx
@@ -141,14 +148,15 @@ print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 # initialise model+loss
 params, h_fn, loss_fn = get_3d_groundwater_flow_model(
 	K1,
-	[3, 256, 256, 1],
+	MDL_LAYERS,
 	data_scale_xytz,
 	k=k_crop,
-	ss=SS,
-	rr=RR,
+	ss=LAM_SS,
+	rr=LAM_RR,
 	lam_mse=LAM_MSE,
 	lam_phys=LAM_PHYS,
-	lam_l2=LAM_L2
+	lam_l2=LAM_L2,
+	hidden_activation=MDL_HIDE_ACT
 )
 
 # try cache
@@ -174,16 +182,16 @@ except Exception as e:
 		loss_fn,
 		(train_x, train_y, train_steps),
 		val_data=(val_x, val_y, val_steps),
-		batch_size=BATCH_SIZE,
-		epochs=EPOCHS,
-		opt=optax.adamw(ETA),
+		batch_size=TRAIN_BATCH,
+		epochs=TRAIN_EPOCH,
+		opt=OPT(OPT_ETA),
 		start_time=T0
 	)
-	print(f"SS={float(params[-1][0])}, RR={float(params[-1][1])}")
+	print(f"LAM_SS={float(params[-1][0])}, LAM_RR={float(params[-1][1])}")
 	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 	
 	# evaluate model
-	test_generator = batch_generator(test_x, test_y, BATCH_SIZE)
+	test_generator = batch_generator(test_x, test_y, TRAIN_BATCH)
 	test_loss = 0.
 	for _ in range(test_steps):
 		test_loss += loss_fn(params, *next(test_generator)) / test_steps
@@ -202,17 +210,17 @@ except Exception as e:
 	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 	
 	# create cache
-	with open(W_CACHE, 'wb') as f:
-		pickle.dump(dict(data_scaler=data_scaler, history=history, params=params, sample=dict(axis_x=axis_x, axis_y=axis_y, axis_t=axis_t, h_sim=h_sim)), f)
-	
-	print(f"Saved \"{W_CACHE}\"")
-	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
+	if CACHE_ENABLE:
+		with open(W_CACHE, 'wb') as f:
+			pickle.dump(dict(data_scaler=data_scaler, history=history, params=params, sample=dict(axis_x=axis_x, axis_y=axis_y, axis_t=axis_t, h_sim=h_sim)), f)
+		print(f"Saved \"{W_CACHE}\"")
+		print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 # plot history
-plt.plot(range(train_steps*EPOCHS), history['batch_loss'], label="Batch", c='purple')
-plt.plot(range(train_steps, train_steps*(EPOCHS+1), train_steps), history['train_loss'], label="Train", c='C0')
-plt.plot(range(train_steps, train_steps*(EPOCHS+1), train_steps), history['val_loss'], label="Val", c='red')
-plt.scatter([train_steps*EPOCHS], history['test_loss'], label="Test", c='green', marker='x')
+plt.plot(range(train_steps*TRAIN_EPOCH), history['batch_loss'], label="Batch", c='purple')
+plt.plot(range(train_steps, train_steps*(TRAIN_EPOCH+1), train_steps), history['train_loss'], label="Train", c='C0')
+plt.plot(range(train_steps, train_steps*(TRAIN_EPOCH+1), train_steps), history['val_loss'], label="Val", c='red')
+plt.scatter([train_steps*TRAIN_EPOCH], history['test_loss'], label="Test", c='green', marker='x')
 plt.legend()
 plt.xlabel("Iteration")
 plt.ylabel("Loss")

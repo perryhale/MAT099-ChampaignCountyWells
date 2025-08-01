@@ -21,26 +21,24 @@ from library.visual import animate_hydrology
 T0 = time.time()
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
-# cache path
-I_CACHE = 'cache/data_interpolated.npz'
-
 # RNG setup
 RNG_SEED = 999
 K0 = jax.random.key(RNG_SEED)
 
-# grid scale
+# cache path
+I_CACHE = 'cache/data_interpolated.npz'
+
+# solver parameters
 DX = 1000
 DY = DX
 DT = 24
+N_STEPS = 10_000
 
 # optimizer
 EPOCHS = 1
 BATCH_SIZE = 16
 ETA = 1e-6
 RHO = 25e-2
-
-# simulation
-N_STEPS = 10_000
 
 # plotting
 VIDEO_FRAME_SKIP = 0
@@ -58,7 +56,7 @@ with jnp.load(I_CACHE) as data_interpolated:
 	print(h_time.shape)
 	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
-# time-series alignment
+# time-series supervised alignment
 data_x = h_time[:-1]
 data_y = h_time[1:]
 print(data_x.shape)
