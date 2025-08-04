@@ -66,14 +66,15 @@ def dense_neural_network(params, x, ha=jax.nn.sigmoid):
 def get_3d_groundwater_flow_model(
 		key,
 		layer_dims,
-		scale_xytz,
+		scale_xytz=jnp.ones(4),
 		k=jnp.ones((1,1)),
 		ss=1e-1,
 		rr=1e-9,
 		lam_mse=1.0,
 		lam_phys=1.0,
 		lam_l2=0.0,
-		hidden_activation=jax.nn.tanh
+		hidden_activation=jax.nn.tanh,
+		collocation_per_input_dim=10
 	):
 	"""
 	Docstring
@@ -81,7 +82,7 @@ def get_3d_groundwater_flow_model(
 	
 	params = [init_dense_neural_network(key, layer_dims), (ss,rr)]
 	h_fn = jax.vmap(lambda p,xyt: dense_neural_network(p, xyt, ha=hidden_activation)[0,0], in_axes=(None, 0)) # N x [0,1] x [0,1] x [0,1] -> N x [0,1]
-	#batch_colloc = jnp.stack(jnp.meshgrid(*[jnp.linspace(0,1,10)]*3), axis=-1).reshape(-1, 3)
+	batch_colloc = jnp.stack(jnp.meshgrid(*[jnp.linspace(0,1,collocation_per_input_dim)]*3), axis=-1).reshape(-1, 3)
 	
 	def loss_3d_groundwater_flow(params_, batch_xyt):
 		"""
@@ -93,12 +94,11 @@ def get_3d_groundwater_flow_model(
 		# (with scaling)
 		"""
 		
-		h_fn_mono = lambda xyt: h_fn(params_[0], xyt[jnp.newaxis, :])[0]
-		h_fn_flux = lambda xyt: unit_grid2_sample_fn(k, *xyt[:2]) * jax.grad(h_fn_mono)(xyt)[:2] * (scale_xytz[3] / scale_xytz[:2])
+		h_fn_mono = lambda xyt: h_fn(params_[0], xyt[jnp.newaxis, :])[0] # un-vmap to drop params for grad wrt xyt
+		h_fn_flux = lambda xyt: unit_grid2_sample_fn(k, *xyt[:2]) * jax.grad(h_fn_mono)(xyt)[:2] * scale_xytz[3] / scale_xytz[:2]
 		
 		# compute 3d groundwater flow terms
-		batch_dhdt = jax.vmap(lambda xyt: jax.grad(h_fn_mono)(xyt)[2] * (scale_xytz[3] / scale_xytz[2]))(batch_xyt)
-		#batch_div_flux = jax.vmap(lambda xyt: jnp.sum(jnp.diag(jax.jacfwd(h_fn_flux)(xyt)[:2, :2]) / scale_xytz[:2]))(batch_xyt)
+		batch_dhdt = jax.vmap(lambda xyt: jax.grad(h_fn_mono)(xyt)[2] * scale_xytz[3] / scale_xytz[2])(batch_xyt)
 		batch_div_flux = jax.vmap(lambda xyt: jnp.sum(jnp.diag(jax.jacfwd(h_fn_flux)(xyt)[:2, :2])))(batch_xyt)
 		batch_ss = params_[-1][0]
 		batch_rr = params_[-1][1]
@@ -117,7 +117,7 @@ def get_3d_groundwater_flow_model(
 	def loss_fn(params_, batch_xyt, batch_z):
 		
 		loss_batch = lam_mse * loss_mse(h_fn(params_[0], batch_xyt), batch_z)
-		loss_phys = lam_phys * loss_3d_groundwater_flow(params_, batch_xyt)
+		loss_phys = lam_phys * loss_3d_groundwater_flow(params_, batch_colloc)
 		loss_reg = lam_l2 * lp_norm(params_[0], order=2)
 		loss = loss_batch + loss_phys + loss_reg
 		

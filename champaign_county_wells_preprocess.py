@@ -165,10 +165,10 @@ except FileNotFoundError:
 	# crop and rescale k
 	k_crop, k_crop_idx = crop_raster(K_PATH, "EPSG:6350", data_bound_w, data_bound_s, data_bound_e, data_bound_n)
 	crop_west_idx, crop_south_idx, crop_east_idx, crop_north_idx = k_crop_idx
-	k_crop = k_crop * 100 # m/hr
 	#k_crop = k_crop # cm/hr
+	#k_crop = k_crop * 100 # m/hr
 	#k_crop = k_crop * 24e-5 # km/day
-	#k_crop = k_crop * 36e4**-1 # m/s
+	k_crop = k_crop * 36e4**-1 # m/s
 	#k_crop = np.ones(k_crop.shape) * 50 # c
 	print(f"k_crop.shape={k_crop.shape}")
 	print(f"k_crop_idx={k_crop_idx}")

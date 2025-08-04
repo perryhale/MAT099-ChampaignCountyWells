@@ -27,7 +27,7 @@ print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 I_CACHE = 'cache/data_interpolated.npz'
 S_CACHE = 'cache/data_surface.csv'
 W_CACHE = 'cache/df_rpinn.pkl'
-CACHE_ENABLE = False
+CACHE_ENABLED = False
 
 # RNG setup
 RNG_SEED = 999
@@ -42,7 +42,7 @@ PART_TEST = 0.20
 
 # model
 MDL_LAYERS = [3, 256, 256, 1]
-MDL_HIDE_ACT = jax.nn.relu
+MDL_HIDE_ACT = jax.nn.tanh
 
 # loss
 LAM_MSE = float(sys.argv[1]) if len(sys.argv) > 1 else 1.0
@@ -116,7 +116,7 @@ data_test = data_points[shuffle_idx[n_val:n_test]]
 # project to unit hypercube
 data_scaler = MinMaxScaler(feature_range=(0, 1))
 data_scaler.fit(data_train)
-data_scale_xytz = data_scaler.data_range_# / jnp.array([1., 1., 3600, 1.]) # units (m, m, hr, m)
+data_scale_xytz = data_scaler.data_range_
 
 data_train = data_scaler.transform(data_train)
 data_val = data_scaler.transform(data_val)
@@ -210,7 +210,7 @@ except Exception as e:
 	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 	
 	# create cache
-	if CACHE_ENABLE:
+	if CACHE_ENABLED:
 		with open(W_CACHE, 'wb') as f:
 			pickle.dump(dict(data_scaler=data_scaler, history=history, params=params, sample=dict(axis_x=axis_x, axis_y=axis_y, axis_t=axis_t, h_sim=h_sim)), f)
 		print(f"Saved \"{W_CACHE}\"")
