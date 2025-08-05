@@ -110,7 +110,6 @@ def get_3d_groundwater_flow_model(
 		# print("DEBUG")
 		# print(f"batch_dhdt.mean()={batch_dhdt.mean()}")
 		# print(f"batch_div_flux.mean()={batch_div_flux.mean()}")
-		# print(f"loss_3d_groundwater_flow={loss}")
 		
 		return loss
 	
@@ -121,11 +120,11 @@ def get_3d_groundwater_flow_model(
 		loss_reg = lam_l2 * lp_norm(params_[0], order=2)
 		loss = loss_batch + loss_phys + loss_reg
 		
-		print("DEBUG")
-		print(f"loss_batch={loss_batch}")
-		print(f"loss_phys={loss_phys}")
-		print(f"loss_reg={loss_reg}")
-		print("***")
+		# print("DEBUG")
+		# print(f"loss_batch={loss_batch}")
+		# print(f"loss_phys={loss_phys}")
+		# print(f"loss_reg={loss_reg}")
+		# print("***")
 		
 		return loss
 	

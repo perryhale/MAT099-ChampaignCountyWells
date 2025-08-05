@@ -14,6 +14,7 @@ from tqdm import tqdm
 from library.data.pipeline import batch_generator
 from library.models.nn import get_3d_groundwater_flow_model, sample_3d_model
 from library.models.util import fit_model
+from library.models.metrics import count_params
 from library.visual import plot_surface3d, animate_hydrology
 
 
@@ -41,8 +42,14 @@ PART_VAL = 0.05
 PART_TEST = 0.20
 
 # model
-MDL_LAYERS = [3, 256, 256, 1]
-MDL_HIDE_ACT = jax.nn.tanh
+MDL_LAYERS = [3, 256, 256, 1] ###! enlarging param space yields no effect
+MDL_ACTIVATION = jax.nn.relu # learns localized curvature, not twice differentiable
+#MDL_ACTIVATION = jax.nn.leaky_relu # same as relu
+###! twice differentiable but physics loss vanished anyway
+#MDL_ACTIVATION = jax.nn.tanh # learns global pattern, no localised curvature
+#MDL_ACTIVATION = jnp.sin # as above
+#MDL_ACTIVATION = lambda x: jnp.log1p(jnp.exp(x)) # as above
+#MDL_ACTIVATION = jax.nn.sigmoid # flat through mean
 
 # loss
 LAM_MSE = float(sys.argv[1]) if len(sys.argv) > 1 else 1.0
@@ -156,8 +163,10 @@ params, h_fn, loss_fn = get_3d_groundwater_flow_model(
 	lam_mse=LAM_MSE,
 	lam_phys=LAM_PHYS,
 	lam_l2=LAM_L2,
-	hidden_activation=MDL_HIDE_ACT
+	hidden_activation=MDL_ACTIVATION
 )
+print(f"Model: count_params(params)={count_params(params)}")
+print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 # try cache
 try:
