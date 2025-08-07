@@ -28,7 +28,7 @@ print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 I_CACHE = 'cache/data_interpolated.npz'
 S_CACHE = 'cache/data_surface.csv'
 H_CACHE = 'cache/gs_as_cache.pkl'
-CACHE_ENABLED = False
+CACHE_ENABLED = True
 
 # RNG setup
 RNG_SEED = 999
@@ -184,15 +184,17 @@ print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 try:
 	with open(H_CACHE, 'rb') as f:
-		w_cache = pickle.load(f)
-		data_scaler=w_cache['data_scaler']
-		params=w_cache['params']
-		history=w_cache['history']
+		h_cache = pickle.load(f)
+		data_scaler=h_cache['data_scaler']
+		params=h_cache['params']
+		trial_axis=h_cache['trial_axis']
+		trial_history=h_cache['trial_history']
 		print(f"Loaded \"{H_CACHE}\"")
 		print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 except Exception:
 	trial_axis = jnp.linspace(MDL_ACTIVATION_SCALE_MIN, MDL_ACTIVATION_SCALE_MAX, MDL_ACTIVATION_SCALE_RES)
+	trial_history = []
 	for activation_scale in trial_axis:
 		
 		# init model
@@ -214,7 +216,7 @@ except Exception:
 		print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 		
 		# fit model
-		params, fit_history = fit(
+		params, history = fit(
 			K2,
 			params,
 			loss_fn,
@@ -246,26 +248,33 @@ except Exception:
 		print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 		
 		# log
-		history = {}
-		history['sampling'] = {'activation_range':SAMPLE_ACTIVATION}
-		history['sampling'] = {'activation':trial_activation_sample}
+		history['test_loss'] = [test_loss]
+		history['sampling']['activation_range'] = SAMPLE_ACTIVATION}
+		history['sampling']['activation'] = trial_activation_sample}
 		history['sampling'] = {'surface':dict(
 			axis_x=axis_x,
 			axis_y=axis_y,
 			axis_t=axis_t,
-			h_sim=h_sim)}
-		history['test_loss'] = [test_loss]
-		history['history'] = fit_history
+			h_sim=h_sim
+		)}
+		trial_history.append(history)
 		
 		# create cache
 		if CACHE_ENABLED:
 			with open(H_CACHE, 'wb') as f:
-				w_cache = dict(
+				h_cache = dict(
 					data_scaler=data_scaler,
 					params=params,
-					history=history
+					trial_axis=trial_axis,
+					trial_history=trial_history
 				)
-				pickle.dump(w_cache, f)
+				pickle.dump(h_cache, f)
 				print(f"Saved \"{H_CACHE}\"")
 				print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
+# plot
+fig, ax = plt.subplots(figsize=(7,5))
+ax.plot(h['test_loss'] for h in trial_history, c='green')
+ax.set_xlabel("activation_scale")
+ax.set_ylabel("Test loss")
+plt.show()
