@@ -46,7 +46,7 @@ MDL_LAYERS = [3, 256, 256, 1] ###![45]
 MDL_ACTIVATION = lambda x,s: jax.nn.tanh(x*s)
 MDL_ACTIVATION_SCALE_MIN = 1.0#1e-3
 MDL_ACTIVATION_SCALE_MAX = 10#1.0
-MDL_ACTIVATION_SCALE_RES = 3
+MDL_ACTIVATION_SCALE_RES = 8
 
 ###![45]
 ###! enlarging param space yields no effect
@@ -212,7 +212,7 @@ except Exception:
 			hidden_activation=trial_activation
 		)
 		trial_activation_sample = trial_activation(SAMPLE_ACTIVATION)
-		print(f"Model: count_params(params)={count_params(params)}, trial_activation_sample={trial_activation_sample}")
+		print(f"activation_scale={activation_scale}, count_params(params)={count_params(params)}, trial_activation_sample={trial_activation_sample}")
 		print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 		
 		# fit model
@@ -249,8 +249,9 @@ except Exception:
 		
 		# log
 		history['test_loss'] = [test_loss]
-		history['sampling']['activation_range'] = SAMPLE_ACTIVATION}
-		history['sampling']['activation'] = trial_activation_sample}
+		history['sampling'] = {}
+		history['sampling']['activation_range'] = SAMPLE_ACTIVATION
+		history['sampling']['activation'] = trial_activation_sample
 		history['sampling'] = {'surface':dict(
 			axis_x=axis_x,
 			axis_y=axis_y,
@@ -274,7 +275,7 @@ except Exception:
 
 # plot
 fig, ax = plt.subplots(figsize=(7,5))
-ax.plot(h['test_loss'] for h in trial_history, c='green')
+ax.plot(trial_axis, [h['test_loss'] for h in trial_history], c='green')
 ax.set_xlabel("activation_scale")
 ax.set_ylabel("Test loss")
 plt.show()
