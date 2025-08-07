@@ -13,7 +13,7 @@ from tqdm import tqdm
 
 from library.models.nn import get_3d_groundwater_flow_model
 from library.models.metrics import count_params
-from library.models.util import fit_model
+from library.models.util import fit
 
 
 ### setup
@@ -110,7 +110,7 @@ def trial_fn(data_points, part_buffer, part_train, k0, batch_size, k1, k_crop, s
 	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 	
 	# fit model
-	params, history = fit_model(
+	params, history = fit(
 		k2, params, loss_fn,
 		(train_x, train_y, train_steps), (val_x, val_y, val_steps),
 		batch_size, epochs, optax.adamw(eta), T0

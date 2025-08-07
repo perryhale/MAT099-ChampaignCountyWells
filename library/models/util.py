@@ -4,7 +4,7 @@ import jax.numpy as jnp
 import optax
 from ..data.pipeline import batch_generator
 
-def fit_model(
+def fit(
 		key,
 		params,
 		loss_fn,
