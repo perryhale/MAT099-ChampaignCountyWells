@@ -73,8 +73,9 @@ def get_3d_groundwater_flow_model(
 		lam_mse=1.0,
 		lam_phys=1.0,
 		lam_l2=0.0,
-		hidden_activation=jax.nn.tanh,
-		collocation_per_input_dim=10
+		hidden_activation=lambda x: jax.nn.tanh(x*3.6),
+		collocation_per_input_dim=10,
+		debug_log=False
 	):
 	"""
 	Docstring
@@ -107,11 +108,13 @@ def get_3d_groundwater_flow_model(
 		loss_darcyflow = batch_ss * batch_dhdt - batch_div_flux - batch_rr
 		loss = jnp.mean(loss_darcyflow**2)
 		
-		# print("DEBUG")
-		# print(f"batch_dhdt.mean()={batch_dhdt.mean()}")
-		# print(f"batch_div_flux.mean()={batch_div_flux.mean()}")
-		
 		return loss
+	
+	loss_log = dict(loss_batch=[], loss_phys=[], loss_reg=[])
+	def log_fn(loss_batch, loss_phys, loss_reg):
+		loss_log["loss_batch"].append(loss_batch.item())
+		loss_log["loss_phys"].append(loss_phys.item())
+		loss_log["loss_reg"].append(loss_reg.item())
 	
 	def loss_fn(params_, batch_xyt, batch_z):
 		
@@ -120,16 +123,11 @@ def get_3d_groundwater_flow_model(
 		loss_reg = lam_l2 * lp_norm(params_[0], order=2)
 		loss = loss_batch + loss_phys + loss_reg
 		
-		# #print("DEBUG")
-		# print(f"loss_batch={loss_batch}")
-		# print(f"loss_phys={loss_phys}")
-		# print(f"loss_reg={loss_reg}")
-		# print("***")
+		jax.debug.callback(log_fn, loss_batch, loss_phys, loss_reg)
 		
 		return loss
 	
-	return params, h_fn, loss_fn
-
+	return (params, h_fn, loss_fn, loss_log) if debug_log else (params, h_fn, loss_fn) ###! for compatability
 
 def sample_3d_model(model, param, axis_t, axis_y, axis_x, batch_size=None):
 	"""

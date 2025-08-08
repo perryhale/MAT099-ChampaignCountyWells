@@ -177,7 +177,7 @@ print(f"Test: x~{test_x.shape}, y~{test_y.shape}, steps={test_steps}")
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 # initialise model+loss
-params, h_fn, loss_fn = get_3d_groundwater_flow_model(
+params, h_fn, loss_fn, loss_log = get_3d_groundwater_flow_model(
 	K1,
 	MDL_LAYERS,
 	data_scale_xytz,
@@ -187,7 +187,8 @@ params, h_fn, loss_fn = get_3d_groundwater_flow_model(
 	lam_mse=LAM_MSE,
 	lam_phys=LAM_PHYS,
 	lam_l2=LAM_L2,
-	hidden_activation=MDL_ACTIVATION
+	hidden_activation=MDL_ACTIVATION,
+	debug_log=True
 )
 print(f"Model: count_params(params)={count_params(params)}")
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")
@@ -254,6 +255,18 @@ plt.plot(range(train_steps*TRAIN_EPOCH), history['batch_loss'], label="Batch", c
 plt.plot(range(train_steps, train_steps*(TRAIN_EPOCH+1), train_steps), history['train_loss'], label="Train", c='C0')
 plt.plot(range(train_steps, train_steps*(TRAIN_EPOCH+1), train_steps), history['val_loss'], label="Val", c='red')
 plt.scatter([train_steps*TRAIN_EPOCH], history['test_loss'], label="Test", c='green', marker='x')
+plt.legend()
+plt.xlabel("Iteration")
+plt.ylabel("Loss")
+plt.grid()
+plt.show()
+print("Closed plot")
+print(f"[Elapsed time: {time.time()-T0:.2f}s]")
+
+###! DEBUG: loss components
+plt.plot(loss_log['loss_batch'], c='r', label="loss_batch") ###! un-implemented caching
+plt.plot(loss_log['loss_phys'], c='g', label="loss_phys")
+#plt.plot(loss_log['loss_reg'], c='b', label="loss_reg")
 plt.legend()
 plt.xlabel("Iteration")
 plt.ylabel("Loss")

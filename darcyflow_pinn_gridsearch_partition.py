@@ -12,7 +12,7 @@ from sklearn.preprocessing import MinMaxScaler
 from tqdm import tqdm
 
 from library.models.nn import get_3d_groundwater_flow_model
-from library.models.metrics import count_params
+from library.models.metrics import *
 from library.models.util import fit
 
 
@@ -51,6 +51,9 @@ RR = 0.0
 AX_LAM_PHYS = jnp.array([LAM_PHYS, 0.0])
 AX_PART_TRAIN = jnp.arange(0.05, 0.75, 0.05)
 AX_PART_BUFFER_FN = lambda part_train: jnp.arange(0.00, max(0, 1 - part_train - PART_VAL - PART_TEST)+0.05, 0.05)
+
+# plotting args
+PLOT_SCHEMES = False
 
 
 ### functions
@@ -265,17 +268,18 @@ print("Closed plot")
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 # plot all partition schemes
-frame_counter = 0
-for i, part_train in enumerate(AX_PART_TRAIN):
-	for j, part_buffer in enumerate(AX_PART_BUFFER_FN(part_train)):
-		
-		test_rmse = trial_history_ax0[0][i][j]['test_rmse'][0]
-		output_name = f"{__file__.replace('.py','')}_Figure_2_{frame_counter}.png"
-		
-		plot_data_partition(part_buffer, part_train, title=f"Data partition in days\nTest RMSE={test_rmse:.2f}m", scale=n_days)
-		plt.tight_layout()
-		plt.savefig(output_name)
-		plt.close()
-		frame_counter += 1
-		print(f"Saved \"{output_name}\"")
-		print(f"[Elapsed time: {time.time()-T0:.2f}s]")
+if PLOT_SCHEMES:
+	frame_counter = 0
+	for i, part_train in enumerate(AX_PART_TRAIN):
+		for j, part_buffer in enumerate(AX_PART_BUFFER_FN(part_train)):
+			
+			test_rmse = trial_history_ax0[0][i][j]['test_rmse'][0]
+			output_name = f"{__file__.replace('.py','')}_Figure_2_{frame_counter}.png"
+			
+			plot_data_partition(part_buffer, part_train, title=f"Data partition in days\nTest RMSE={test_rmse:.2f}m", scale=n_days)
+			plt.tight_layout()
+			plt.savefig(output_name)
+			plt.close()
+			frame_counter += 1
+			print(f"Saved \"{output_name}\"")
+			print(f"[Elapsed time: {time.time()-T0:.2f}s]")
