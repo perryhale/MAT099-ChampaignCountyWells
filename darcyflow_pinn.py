@@ -12,7 +12,7 @@ from sklearn.preprocessing import MinMaxScaler
 from tqdm import tqdm
 
 from library.data.pipeline import batch_generator
-from library.models.nn import get_3d_groundwater_flow_model, sample_3d_model
+from library.models.nn import *
 from library.models.util import fit
 from library.models.metrics import count_params
 from library.visual import plot_surface3d, animate_hydrology
@@ -188,7 +188,9 @@ params, h_fn, loss_fn, loss_log = get_3d_groundwater_flow_model(
 	lam_phys=LAM_PHYS,
 	lam_l2=LAM_L2,
 	hidden_activation=MDL_ACTIVATION,
-	debug_log=True
+	debug_log=True,
+#	model_init=init_dnn_adactivation,
+#	model_fn=dnn_adactivation
 )
 print(f"Model: count_params(params)={count_params(params)}")
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")

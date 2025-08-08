@@ -257,7 +257,7 @@ except Exception:
 			axis_y=axis_y,
 			axis_t=axis_t,
 			h_sim=h_sim
-		)}
+		)
 		trial_history.append(history)
 		
 		# create cache

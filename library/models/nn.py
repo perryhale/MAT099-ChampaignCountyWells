@@ -44,7 +44,7 @@ def init_dense_neural_network(key, layers):
 
 def dense_neural_network(params, x, ha=jax.nn.sigmoid):
 	"""
-	# type: (list[tuple[jnp.array]], jnp.array, jax.nn.[Activation functions]) -> jnp.array
+	# type: (list[tuple[jnp.array*2]], jnp.array, jax.nn.[Activation functions]) -> jnp.array
 	# x inR (in, 1)
 	# z inR (out, 1)
 	"""
@@ -63,6 +63,50 @@ def dense_neural_network(params, x, ha=jax.nn.sigmoid):
 	return z
 
 
+def init_dnn_adactivation(key, layers):
+	"""
+	# type: (int, list[int]) -> list[tuple[jnp.array, jnp.array, jnp.array]]
+	"""
+	
+	# split key
+	k0, key = jax.random.split(key)
+	
+	# initialise input layer
+	w_list = [init_glorot_uniform(k0, (layers[1], layers[0]), layers[0], layers[1])]
+	b_list = [jnp.zeros((layers[1], 1))]
+	a_list = [jnp.ones((layers[1], 1))]
+	
+	# initialise hidden layers
+	for i in range(1, len(layers)-1):
+		k1, key = jax.random.split(key)
+		w_list.append(init_glorot_uniform(k1, (layers[i+1], layers[i]), layers[i], layers[i+1]))
+		b_list.append(jnp.zeros((layers[i+1], 1)))
+		a_list.append(jnp.ones((layers[i+1], 1)))
+	
+	return list(map(tuple, zip(w_list, b_list, a_list)))
+
+
+def dnn_adactivation(params, x, ha=jax.nn.sigmoid):
+	"""
+	# type: (list[tuple[jnp.array*3]], jnp.array, jax.nn.{Activation functions}) -> jnp.array
+	# x inR (in, 1)
+	# z inR (out, 1)
+	"""
+	
+	# shape-safe input activation
+	h = x.reshape(-1, 1)
+	
+	# hidden activations
+	for w,b,a in params[:-1]:
+		h = ha(a * (jnp.dot(w, h) + b))
+	
+	# output activation
+	wn, bn, an = params[-1]
+	z = an * (jnp.dot(wn, h) + bn)
+	
+	return z
+
+
 def get_3d_groundwater_flow_model(
 		key,
 		layer_dims,
@@ -75,14 +119,16 @@ def get_3d_groundwater_flow_model(
 		lam_l2=0.0,
 		hidden_activation=lambda x: jax.nn.tanh(x*3.6),
 		collocation_per_input_dim=10,
-		debug_log=False
+		debug_log=False,
+		model_init=init_dense_neural_network,
+		model_fn=dense_neural_network
 	):
 	"""
 	Docstring
 	"""
 	
-	params = [init_dense_neural_network(key, layer_dims), (ss,rr)]
-	h_fn = jax.vmap(lambda p,xyt: dense_neural_network(p, xyt, ha=hidden_activation)[0,0], in_axes=(None, 0)) # N x [0,1] x [0,1] x [0,1] -> N x [0,1]
+	params = [model_init(key, layer_dims), (ss,rr)]
+	h_fn = jax.vmap(lambda p,xyt: model_fn(p, xyt, ha=hidden_activation)[0,0], in_axes=(None, 0)) # N x [0,1] x [0,1] x [0,1] -> N x [0,1]
 	batch_colloc = jnp.stack(jnp.meshgrid(*[jnp.linspace(0,1,collocation_per_input_dim)]*3), axis=-1).reshape(-1, 3)
 	
 	def loss_3d_groundwater_flow(params_, batch_xyt):
