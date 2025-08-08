@@ -252,7 +252,7 @@ except Exception:
 		history['sampling'] = {}
 		history['sampling']['activation_range'] = SAMPLE_ACTIVATION
 		history['sampling']['activation'] = trial_activation_sample
-		history['sampling'] = {'surface':dict(
+		history['sampling']['surface'] = dict(
 			axis_x=axis_x,
 			axis_y=axis_y,
 			axis_t=axis_t,
@@ -273,9 +273,54 @@ except Exception:
 				print(f"Saved \"{H_CACHE}\"")
 				print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
-# plot
-fig, ax = plt.subplots(figsize=(7,5))
-ax.plot(trial_axis, [h['test_loss'] for h in trial_history], c='green')
+# extract stats
+axis_test_loss = jnp.array([h['test_loss'] for h in trial_history])
+idx_opt_trial = jnp.argmin(axis_test_loss)
+axis_x = trial_history[idx_opt_trial]['sampling']['surface']['axis_x']
+axis_y = trial_history[idx_opt_trial]['sampling']['surface']['axis_y']
+axis_t = trial_history[idx_opt_trial]['sampling']['surface']['axis_t']
+h_sim = trial_history[idx_opt_trial]['sampling']['surface']['h_sim']
+
+# plot test loss
+fig, ax = plt.subplots(figsize=(4,3))
+ax.plot(trial_axis, axis_test_loss, c='green')
 ax.set_xlabel("activation_scale")
 ax.set_ylabel("Test loss")
+plt.xticks(trial_axis, [f"{x:.1f}" for x in trial_axis])
+plt.grid()
+plt.subplots_adjust(left=None, bottom=None, right=None, top=None, wspace=None, hspace=None)
 plt.show()
+print("Closed plot")
+print(f"[Elapsed time: {time.time()-T0:.2f}s]")
+
+# plot surface
+fig, axis = plt.subplots(figsize=(20,3), nrows=1, ncols=MDL_ACTIVATION_SCALE_RES)
+for ax, s, h in zip(axis, trial_axis, trial_history):
+	ax_contour = ax.contour(h['sampling']['surface']['h_sim'][50], levels=10, cmap='binary_r', extent=(0,1,0,1))
+	ax_clabel = ax.clabel(ax_contour, inline=True, fontsize=8, colors='red')
+	ax.grid()
+	ax.set_xticks([],[])
+	ax.set_yticks([],[])
+	ax.set_title(f"scale={s:.1f}", fontsize=11)
+plt.tight_layout()
+plt.show()
+print("Closed plot")
+print(f"[Elapsed time: {time.time()-T0:.2f}s]")
+
+# animate optimum surface
+data_scatter = (data_wells - data_scaler.data_min_[:2]) / data_scaler.data_range_[:2]
+animate_hydrology(
+	h_sim,
+	k=k_crop,
+	grid_extent=(axis_x.min(), axis_x.max(), axis_y.min(), axis_y.max()),
+	cmap_contour='Blues_r',
+	axis_ticks=True,
+	origin=None,
+	isolines=10,
+	scatter_data=data_scatter.T,
+	title_fn=lambda t: f"t={axis_t[t]:.2f}",
+	clabel_fmt='%d',
+#	save_path="Figure_5.mp4"
+)
+print("Closed plot")
+print(f"[Elapsed time: {time.time()-T0:.2f}s]")

@@ -128,7 +128,7 @@ def get_3d_groundwater_flow_model(
 		
 		return loss
 	
-	return (params, h_fn, loss_fn)
+	return params, h_fn, loss_fn
 
 
 def sample_3d_model(model, param, axis_t, axis_y, axis_x, batch_size=None):

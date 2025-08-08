@@ -42,14 +42,19 @@ PART_VAL = 0.05
 PART_TEST = 0.20
 
 # model
-MDL_LAYERS = [3, 256, 256, 1] ###! enlarging param space yields no effect
+MDL_LAYERS = [3, 256, 256, 1] ###![45]
+MDL_ACTIVATION = lambda x: jax.nn.tanh(x*3.6)
+
+###![45]
+###! enlarging param space yields no effect
 #MDL_ACTIVATION = jax.nn.relu # learns localized curvature, not twice differentiable
 #MDL_ACTIVATION = jax.nn.leaky_relu # same as relu
 ###! twice differentiable but physics loss vanished anyway
-MDL_ACTIVATION = lambda x: jax.nn.tanh(x*6) # learns global pattern, no localised curvature
+#MDL_ACTIVATION = jax.nn.tanh # learns global pattern, no localised curvature
 #MDL_ACTIVATION = jnp.sin # as above
 #MDL_ACTIVATION = lambda x: jnp.log1p(jnp.exp(x)) # as above
 #MDL_ACTIVATION = jax.nn.sigmoid # flat through mean
+
 
 # loss
 LAM_MSE = float(sys.argv[1]) if len(sys.argv) > 1 else 1.0
