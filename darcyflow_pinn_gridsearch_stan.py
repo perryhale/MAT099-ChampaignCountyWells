@@ -42,35 +42,24 @@ PART_VAL = 0.05
 PART_TEST = 0.20
 
 # model
-MDL_LAYERS = [3, 256, 256, 1] ###![45]
-MDL_ACTIVATION = lambda x,s: jax.nn.tanh(x*s)
-MDL_ACTIVATION_SCALE_MIN = 1.0#1e-3
-MDL_ACTIVATION_SCALE_MAX = 10#1.0
-MDL_ACTIVATION_SCALE_RES = 8
+MODEL_LAYERS = [3, 256, 256, 1]
+MODEL_ACTIVATION = lambda b,x: jax.nn.tanh(x) + b * x * jax.nn.tanh(x) # stan(x)
+MODEL_ACTIVATION_B_MIN = 0
+MODEL_ACTIVATION_B_MAX = 5
+MODEL_ACTIVATION_B_RES = 8
 
-###![45]
-###! enlarging param space yields no effect
-#MDL_ACTIVATION = jax.nn.relu # learns localized curvature, not twice differentiable
-#MDL_ACTIVATION = jax.nn.leaky_relu # same as relu
-###! twice differentiable but physics loss vanished anyway
-#MDL_ACTIVATION = lambda x: jax.nn.tanh(x*6) # learns global pattern, no localised curvature
-#MDL_ACTIVATION = jnp.sin # as above
-#MDL_ACTIVATION = lambda x: jnp.log1p(jnp.exp(x)) # as above
-#MDL_ACTIVATION = jax.nn.sigmoid # flat through mean
-
-# loss
+# loss terms
 LAM_MSE = float(sys.argv[1]) if len(sys.argv) > 1 else 1.0
 LAM_PHYS = float(sys.argv[2]) if len(sys.argv) > 2 else 1.0
 LAM_L2 = float(sys.argv[3]) if len(sys.argv) > 3 else 0.0
 LAM_SS = 1e-5
 LAM_RR = 0.0
 
-# optimizer
+# optimizer params
 OPT = optax.adamw
 OPT_ETA = 1e-4
 
-# sampling
-SAMPLE_ACTIVATION = jnp.linspace(-5, 5, 32)
+# all sampling
 SAMPLE_3D_XMIN = 0#-2
 SAMPLE_3D_XMAX = 1#+3
 SAMPLE_3D_XRES = 0 ###! 0 -> inherit k shape
@@ -81,29 +70,29 @@ SAMPLE_3D_TMIN = 0
 SAMPLE_3D_TMAX = 2.6
 SAMPLE_3D_TRES = 260
 SAMPLE_3D_BATCH = False
+SAMPLE_ACTIVATION = jnp.linspace(-5, 5, 32)
 
 
 ### main
 
-# load cache
+# load caches
 with jnp.load(I_CACHE) as i_cache:
 	k_crop = i_cache['k_crop']
 	data_wells = i_cache['data_wells']
-	print(f"Loaded \"{I_CACHE}\"")
-	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
+print(f"Loaded \"{I_CACHE}\"")
+print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 data_surface = pd.read_csv(S_CACHE).to_numpy()
 print(f"Loaded \"{S_CACHE}\"")
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 # populate xyt->z
-data_points = []
-for i in range(0, data_surface.shape[0], 1):
-	for j in range(0, data_surface.shape[1]-1, 1):
-		xytz = (*data_wells[j], data_surface[i][0], data_surface[i][j+1]) # xytz
-		data_points.append(xytz)
-
-data_points = jnp.array(data_points)
+data_points = jnp.array([(
+	data_wells[j][0],
+	data_wells[j][1],
+	data_surface[i][0],
+	data_surface[i][j+1]
+) for j in range(0, data_surface.shape[1]-1, 1) for i in range(0, data_surface.shape[0], 1)])
 
 ###! raw measurements
 # M_CACHE = 'cache/data_filtered_metric.csv'
@@ -111,7 +100,7 @@ data_points = jnp.array(data_points)
 # data_filtered_metric = data_filtered_metric.dropna()
 # data_points = data_filtered_metric[['X_EPSG_6350', 'Y_EPSG_6350', 'TIMESTAMP', 'HYDRAULIC_HEAD_M']].to_numpy()
 
-# partition data
+###! total shuffle
 # n_data = len(data_points)
 # shuffle_idx = jax.random.permutation(K0, n_data)
 # data_train = data_points[shuffle_idx[:int(PART_TRAIN * n_data)]]
@@ -193,15 +182,15 @@ try:
 		print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 except Exception:
-	trial_axis = jnp.linspace(MDL_ACTIVATION_SCALE_MIN, MDL_ACTIVATION_SCALE_MAX, MDL_ACTIVATION_SCALE_RES)
+	trial_axis = jnp.linspace(MODEL_ACTIVATION_B_MIN, MODEL_ACTIVATION_B_MAX, MODEL_ACTIVATION_B_RES)
 	trial_history = []
-	for activation_scale in trial_axis:
+	for b in trial_axis:
 		
 		# init model
-		trial_activation = lambda x: MDL_ACTIVATION(x, activation_scale)
+		trial_activation = lambda x: MODEL_ACTIVATION(b, x)
 		params, h_fn, loss_fn = get_3d_groundwater_flow_model(
 			K1,
-			MDL_LAYERS,
+			MODEL_LAYERS,
 			scale_xytz=data_scale_xytz,
 			k=k_crop,
 			ss=LAM_SS,
@@ -212,7 +201,7 @@ except Exception:
 			hidden_activation=trial_activation
 		)
 		trial_activation_sample = trial_activation(SAMPLE_ACTIVATION)
-		print(f"activation_scale={activation_scale}, count_params(params)={count_params(params)}, trial_activation_sample={trial_activation_sample}")
+		print(f"β={b}, count_params(params)={count_params(params)}, trial_activation_sample={trial_activation_sample}")
 		print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 		
 		# fit model
@@ -280,34 +269,70 @@ axis_x = trial_history[idx_opt_trial]['sampling']['surface']['axis_x']
 axis_y = trial_history[idx_opt_trial]['sampling']['surface']['axis_y']
 axis_t = trial_history[idx_opt_trial]['sampling']['surface']['axis_t']
 h_sim = trial_history[idx_opt_trial]['sampling']['surface']['h_sim']
+print(f"idx_opt_trial={idx_opt_trial}, trial_axis[idx_opt_trial]={trial_axis[idx_opt_trial]}")
+print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
-# plot test loss
+# plot results
 fig, ax = plt.subplots(figsize=(4,3))
 ax.plot(trial_axis, axis_test_loss, c='green')
-ax.set_xlabel("activation_scale")
+ax.set_xlabel("β")
 ax.set_ylabel("Test loss")
-plt.xticks(trial_axis, [f"{x:.1f}" for x in trial_axis])
-plt.grid()
+ax.set_xticks(trial_axis, [f"{x:.1f}" for x in trial_axis])
+ax.grid()
 plt.subplots_adjust(left=None, bottom=None, right=None, top=None, wspace=None, hspace=None)
 plt.show()
 print("Closed plot")
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
-# plot surface
-fig, axis = plt.subplots(figsize=(20,3), nrows=1, ncols=MDL_ACTIVATION_SCALE_RES)
-for ax, s, h in zip(axis, trial_axis, trial_history):
+# plot activation functions
+a_fn = MODEL_ACTIVATION
+b_cols = plt.cm.Dark2(jnp.linspace(0, 1, MODEL_ACTIVATION_B_RES))
+bs = trial_axis
+xs = SAMPLE_ACTIVATION
+
+bys = [a_fn(b, xs) for b in bs]
+bgys = [jax.vmap(jax.grad(lambda x: a_fn(b, x)))(xs) for b in bs]
+
+fig, (ax0, ax1) = plt.subplots(nrows=1, ncols=2, figsize=(10,4))
+
+for b,ys,gys,c in zip(bs, bys, bgys, b_cols):
+	ax0.plot(xs, ys, c=c, label=f"β = {b:.1f}")
+	ax1.plot(xs, gys, c=c, label=f"β = {b:.1f}")
+
+ax0.axhline(0, linestyle='dashed', c='black')
+ax0.axvline(0, linestyle='dashed', c='black')
+ax0.set_xlim(SAMPLE_ACTIVATION.min(), SAMPLE_ACTIVATION.max())
+ax0.set_ylabel("Stan(x)")
+ax0.set_xlabel("x")
+ax0.grid()
+ax0.legend()
+
+ax1.axhline(0, linestyle='dashed', c='black')
+ax1.axvline(0, linestyle='dashed', c='black')
+ax1.set_xlim(SAMPLE_ACTIVATION.min(), SAMPLE_ACTIVATION.max())
+ax1.set_ylabel("δStan(x) / δx")
+ax1.set_xlabel("x")
+ax1.grid()
+ax1.legend()
+
+plt.tight_layout()
+plt.show()
+
+# plot surfaces
+fig, axis = plt.subplots(figsize=(20,3), nrows=1, ncols=MODEL_ACTIVATION_B_RES)
+for ax, b, h in zip(axis, trial_axis, trial_history):
 	ax_contour = ax.contour(h['sampling']['surface']['h_sim'][50], levels=10, cmap='binary_r', extent=(0,1,0,1))
 	ax_clabel = ax.clabel(ax_contour, inline=True, fontsize=8, colors='red')
 	ax.grid()
 	ax.set_xticks([],[])
 	ax.set_yticks([],[])
-	ax.set_title(f"scale={s:.1f}", fontsize=11)
+	ax.set_title(f"β={b:.1f}", fontsize=11)
 plt.tight_layout()
 plt.show()
 print("Closed plot")
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
-# animate optimum surface
+# animate best surface
 data_scatter = (data_wells - data_scaler.data_min_[:2]) / data_scaler.data_range_[:2]
 animate_hydrology(
 	h_sim,
@@ -320,7 +345,7 @@ animate_hydrology(
 	scatter_data=data_scatter.T,
 	title_fn=lambda t: f"t={axis_t[t]:.2f}",
 	clabel_fmt='%d',
-#	save_path="Figure_5.mp4"
+	save_path="darcyflow_pinn_animation.mp4"
 )
 print("Closed plot")
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")

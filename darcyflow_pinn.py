@@ -42,19 +42,11 @@ PART_VAL = 0.05
 PART_TEST = 0.20
 
 # model
-MDL_LAYERS = [3, 256, 256, 1] ###![45]
-MDL_ACTIVATION = lambda x: jax.nn.tanh(x*3.6)
-
-###![45]
-###! enlarging param space yields no effect
-#MDL_ACTIVATION = jax.nn.relu # learns localized curvature, not twice differentiable
-#MDL_ACTIVATION = jax.nn.leaky_relu # same as relu
-###! twice differentiable but physics loss vanished anyway
-#MDL_ACTIVATION = jax.nn.tanh # learns global pattern, no localised curvature
-#MDL_ACTIVATION = jnp.sin # as above
-#MDL_ACTIVATION = lambda x: jnp.log1p(jnp.exp(x)) # as above
-#MDL_ACTIVATION = jax.nn.sigmoid # flat through mean
-
+MODEL_LAYERS = [3, 256, 256, 1]
+MODEL_B = 7/2
+ACTIVATION_STAN = lambda x: jax.nn.tanh(x) + MODEL_B * x * jax.nn.tanh(x)
+ACTIVATION_SQUASH_TANH = lambda x: jax.nn.tanh(MODEL_B * x)
+MODEL_ACTIVATION = ACTIVATION_STAN
 
 # loss
 LAM_MSE = float(sys.argv[1]) if len(sys.argv) > 1 else 1.0
@@ -179,7 +171,7 @@ print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 # initialise model+loss
 params, h_fn, loss_fn, loss_log = get_3d_groundwater_flow_model(
 	K1,
-	MDL_LAYERS,
+	MODEL_LAYERS,
 	data_scale_xytz,
 	k=k_crop,
 	ss=LAM_SS,
@@ -187,7 +179,7 @@ params, h_fn, loss_fn, loss_log = get_3d_groundwater_flow_model(
 	lam_mse=LAM_MSE,
 	lam_phys=LAM_PHYS,
 	lam_l2=LAM_L2,
-	hidden_activation=MDL_ACTIVATION,
+	hidden_activation=MODEL_ACTIVATION,
 	debug_log=True,
 #	model_init=init_dnn_adactivation,
 #	model_fn=dnn_adactivation
@@ -319,7 +311,7 @@ animate_hydrology(
 	scatter_data=data_scatter.T,
 	title_fn=lambda t: f"t={axis_t[t]:.2f}",
 	clabel_fmt='%d',
-#	save_path="Figure_4.mp4"
+	save_path="darcyflow_pinn_animation.mp4"
 )
 print("Closed plot")
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")
