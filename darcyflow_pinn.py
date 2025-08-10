@@ -94,13 +94,13 @@ for i in range(0, data_surface.shape[0], 1):
 
 data_points = jnp.array(data_points)
 
-###!
+###! raw measurements
 # M_CACHE = 'cache/data_filtered_metric.csv'
 # data_filtered_metric = pd.read_csv(M_CACHE)
 # data_filtered_metric = data_filtered_metric.dropna()
 # data_points = data_filtered_metric[['X_EPSG_6350', 'Y_EPSG_6350', 'TIMESTAMP', 'HYDRAULIC_HEAD_M']].to_numpy()
 
-# partition data
+###! total shuffle
 # n_data = len(data_points)
 # shuffle_idx = jax.random.permutation(K0, n_data)
 # data_train = data_points[shuffle_idx[:int(PART_TRAIN * n_data)]]
