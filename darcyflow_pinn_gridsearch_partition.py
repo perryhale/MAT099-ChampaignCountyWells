@@ -22,32 +22,38 @@ from library.models.util import fit
 T0 = time.time()
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
+# RNG setup
+RNG_SEED = 999
+K0, K1, K2 = jax.random.split(jax.random.key(RNG_SEED), 3)
+
 # cache path
 I_CACHE = 'cache/data_interpolated.npz'
 S_CACHE = 'cache/data_surface.csv'
 G_CACHE = 'cache/cache_gs_pt.pkl'
 
-# RNG setup
-RNG_SEED = 999
-K0, K1, K2 = jax.random.split(jax.random.key(RNG_SEED), 3)
+# model
+MODEL_LAYERS = [3, 256, 256, 1]
 
-# data partitions
-EPOCHS = 2
-BATCH_SIZE = 64
-PART_VAL = 0.05
-PART_TEST = 0.25
+###! variations
+# MODEL_ACTIVATION = lambda x: jax.nn.tanh(x) + 3.9 * x * jax.nn.tanh(x) # optimal stan
+# MODEL_ACTIVATION = lambda x: jax.nn.tanh(3.57 * x) # optimal squashed tanh
+MODEL_ACTIVATION = lambda x: jax.nn.relu(6.1 * x) # optimal squashed relu
 
-# optimizer
-ETA = 1e-4
+# loss terms
 LAM_MSE = 1.0
 LAM_PHYS = 1.0
 LAM_L2 = 0.0
-
-# physical constants (default)
 SS = 1e-5
 RR = 0.0
 
-# trial axis
+# optimizer
+ETA = 1e-4
+EPOCHS = 2
+BATCH_SIZE = 64
+
+# data partition
+PART_VAL = 0.05
+PART_TEST = 0.25
 AX_LAM_PHYS = jnp.array([LAM_PHYS, 0.0])
 AX_PART_TRAIN = jnp.arange(0.05, 0.75, 0.05)
 AX_PART_BUFFER_FN = lambda part_train: jnp.arange(0.00, max(0, 1 - part_train - PART_VAL - PART_TEST)+0.05, 0.05)
@@ -105,9 +111,10 @@ def trial_fn(data_points, part_buffer, part_train, k0, batch_size, k1, k_crop, s
 	
 	# initialise model+loss
 	params, h_fn, loss_fn = get_3d_groundwater_flow_model(
-		k1, [3, 256, 256, 1],
+		k1, MODEL_LAYERS,
 		data_scale_xytz, k_crop, ss, rr,
-		lam_mse, lam_phys, lam_l2
+		lam_mse, lam_phys, lam_l2,
+		hidden_activation=MODEL_ACTIVATION
 	)
 	print(f"count_params(params)={count_params(params)}")
 	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
@@ -183,12 +190,12 @@ def plot_data_partition(part_buffer, part_train, title="", scale=1, shuffle_val_
 
 ### main
 
-# load cache
+# load caches
 with jnp.load(I_CACHE) as i_cache:
 	k_crop = i_cache['k_crop']
 	data_wells = i_cache['data_wells']
-	print(f"Loaded \"{I_CACHE}\"")
-	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
+print(f"Loaded \"{I_CACHE}\"")
+print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 data_surface = pd.read_csv(S_CACHE).to_numpy()
 print(f"Loaded \"{S_CACHE}\"")
@@ -197,7 +204,7 @@ print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 # try cache
 try:
 	with open(G_CACHE, 'rb') as f:
-		trial_history_ax0 = pickle.load(f)
+		results = pickle.load(f)
 		print(f"Loaded \"{G_CACHE}\"")
 		print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
@@ -213,13 +220,13 @@ except Exception as e:
 	data_points = jnp.array(data_points)
 	
 	# determine results and store as linked list
-	trial_history_ax0 = []
+	results = []
 	for lam_phys in AX_LAM_PHYS:
 		
-		trial_history_ax1 = []
+		results_ax1 = []
 		for part_train in AX_PART_TRAIN:
 			
-			trial_history_ax2 = []
+			results_ax2 = []
 			for part_buffer in AX_PART_BUFFER_FN(part_train):
 				
 				print(f"*** Trial: lam_phys={lam_phys:.2f}, part_train={part_train:.2f}, part_buffer={part_buffer:.2f} ***")
@@ -231,22 +238,22 @@ except Exception as e:
 				)
 				print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 				
-				trial_history_ax2.append(history)
+				results_ax2.append(history)
 			
-			trial_history_ax1.append(trial_history_ax2)
+			results_ax1.append(results_ax2)
 		
-		trial_history_ax0.append(trial_history_ax1)
+		results.append(results_ax1)
 		
 		# save cache
 		with open(G_CACHE, 'wb') as f:
-			pickle.dump(trial_history_ax0, f)
+			pickle.dump(results, f)
 			print(f"Saved \"{G_CACHE}\"")
 			print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 	
 	# cleanup
 	del data_points
-	del trial_history_ax1
-	del trial_history_ax2
+	del results_ax1
+	del results_ax2
 	del history
 
 
@@ -256,8 +263,8 @@ test_days = int(PART_TEST * n_days)
 axis_train_days = jnp.astype(n_days * AX_PART_TRAIN, 'int32')
 
 fig, ax = plt.subplots(figsize=(7,5))
-ax.plot(axis_train_days, [sum([h['test_rmse'][0] for h in h_ax2]) / len(h_ax2) for h_ax2 in trial_history_ax0[0]], c='darkgreen', label="PINN")
-ax.plot(axis_train_days, [sum([h['test_rmse'][0] for h in h_ax2]) / len(h_ax2) for h_ax2 in trial_history_ax0[1]], c='darkred', linestyle='dashed', label="MSE")
+ax.plot(axis_train_days, [sum([h['test_rmse'][0] for h in h_ax2]) / len(h_ax2) for h_ax2 in results[0]], c='darkgreen', label="PINN")
+ax.plot(axis_train_days, [sum([h['test_rmse'][0] for h in h_ax2]) / len(h_ax2) for h_ax2 in results[1]], c='darkred', linestyle='dashed', label="MSE")
 ax.legend()
 ax.set_ylabel("Cross-validated test RMSE (Metres)")
 ax.set_xlabel("Num. days in [Train:Test] sets")
@@ -273,7 +280,7 @@ if PLOT_SCHEMES:
 	for i, part_train in enumerate(AX_PART_TRAIN):
 		for j, part_buffer in enumerate(AX_PART_BUFFER_FN(part_train)):
 			
-			test_rmse = trial_history_ax0[0][i][j]['test_rmse'][0]
+			test_rmse = results[0][i][j]['test_rmse'][0]
 			output_name = f"{__file__.replace('.py','')}_Figure_2_{frame_counter}.png"
 			
 			plot_data_partition(part_buffer, part_train, title=f"Data partition in days\nTest RMSE={test_rmse:.2f}m", scale=n_days)

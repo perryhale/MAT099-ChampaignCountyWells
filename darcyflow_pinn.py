@@ -43,10 +43,11 @@ PART_TEST = 0.20
 
 # model
 MODEL_LAYERS = [3, 256, 256, 1]
-MODEL_B = 7/2
-ACTIVATION_STAN = lambda x: jax.nn.tanh(x) + MODEL_B * x * jax.nn.tanh(x)
-ACTIVATION_SQUASH_TANH = lambda x: jax.nn.tanh(MODEL_B * x)
-MODEL_ACTIVATION = ACTIVATION_STAN
+
+###! variations
+MODEL_ACTIVATION = lambda x: jax.nn.tanh(x) + 3.9 * x * jax.nn.tanh(x) # optimal stan
+#MODEL_ACTIVATION = lambda x: jax.nn.tanh(3.57 * x) # optimal squashed tanh
+#MODEL_ACTIVATION = jax.nn.relu
 
 # loss
 LAM_MSE = float(sys.argv[1]) if len(sys.argv) > 1 else 1.0

@@ -117,7 +117,7 @@ def get_3d_groundwater_flow_model(
 		lam_mse=1.0,
 		lam_phys=1.0,
 		lam_l2=0.0,
-		hidden_activation=lambda x: jax.nn.tanh(x*3.6),
+		hidden_activation=jax.nn.tanh,
 		collocation_per_input_dim=10,
 		debug_log=False,
 		model_init=init_dense_neural_network,
@@ -153,6 +153,9 @@ def get_3d_groundwater_flow_model(
 		# compute l2 of PDE residual
 		loss_darcyflow = batch_ss * batch_dhdt - batch_div_flux - batch_rr
 		loss = jnp.mean(loss_darcyflow**2)
+		
+		# jax.debug.print("batch_dhdt.mean()={}", batch_dhdt.mean())
+		# jax.debug.print("batch_div_flux.mea()={}", batch_div_flux.mean())
 		
 		return loss
 	
