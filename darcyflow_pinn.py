@@ -45,8 +45,8 @@ PART_TEST = 0.20
 MODEL_LAYERS = [3, 256, 256, 1]
 
 ###! variations
-MODEL_ACTIVATION = lambda x: jax.nn.tanh(x) + 3.9 * x * jax.nn.tanh(x) # optimal stan
-#MODEL_ACTIVATION = lambda x: jax.nn.tanh(3.57 * x) # optimal squashed tanh
+#MODEL_ACTIVATION = lambda x: jax.nn.tanh(x) + 3.9 * x * jax.nn.tanh(x) # optimal stan
+MODEL_ACTIVATION = lambda x: jax.nn.tanh(3.57 * x) # optimal squashed tanh
 #MODEL_ACTIVATION = jax.nn.relu
 
 # loss
@@ -258,10 +258,9 @@ plt.show()
 print("Closed plot")
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
-###! DEBUG: loss components
-plt.plot(loss_log['loss_batch'], c='r', label="loss_batch") ###! un-implemented caching
-plt.plot(loss_log['loss_phys'], c='g', label="loss_phys")
-#plt.plot(loss_log['loss_reg'], c='b', label="loss_reg")
+###! DEBUG: loss components (not cached)
+for (k, v), c in zip(loss_log.items(), plt.cm.Dark2(jnp.linspace(0, 1, len(loss_log.items())))):
+	if k!='loss_batch': plt.plot(v, c=c, label=k)
 plt.legend()
 plt.xlabel("Iteration")
 plt.ylabel("Loss")

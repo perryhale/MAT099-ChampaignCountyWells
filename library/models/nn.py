@@ -3,8 +3,9 @@ import jax
 import jax.numpy as jnp
 import optax
 from tqdm import tqdm
+from collections import defaultdict
 
-from .metrics import *
+from .util import *
 from ..data.pipeline import batch_generator_mono
 from ..data.sampling import unit_grid2_sample_fn
 
@@ -119,7 +120,7 @@ def get_3d_groundwater_flow_model(
 		lam_l2=0.0,
 		hidden_activation=jax.nn.tanh,
 		collocation_per_input_dim=10,
-		debug_log=False,
+		# debug_log=False,
 		model_init=init_dense_neural_network,
 		model_fn=dense_neural_network
 	):
@@ -130,6 +131,12 @@ def get_3d_groundwater_flow_model(
 	params = [model_init(key, layer_dims), (ss,rr)]
 	h_fn = jax.vmap(lambda p,xyt: model_fn(p, xyt, ha=hidden_activation)[0,0], in_axes=(None, 0)) # N x [0,1] x [0,1] x [0,1] -> N x [0,1]
 	batch_colloc = jnp.stack(jnp.meshgrid(*[jnp.linspace(0,1,collocation_per_input_dim)]*3), axis=-1).reshape(-1, 3)
+	
+	###! debug logging, slows execution in non-logging context -> needs fix / manual disable
+	# loss_log = defaultdict(list)
+	# def log_fn(k,v):
+		# if debug_log:
+			# loss_log[k].append(v)
 	
 	def loss_3d_groundwater_flow(params_, batch_xyt):
 		"""
@@ -154,16 +161,11 @@ def get_3d_groundwater_flow_model(
 		loss_darcyflow = batch_ss * batch_dhdt - batch_div_flux - batch_rr
 		loss = jnp.mean(loss_darcyflow**2)
 		
-		# jax.debug.print("batch_dhdt.mean()={}", batch_dhdt.mean())
-		# jax.debug.print("batch_div_flux.mea()={}", batch_div_flux.mean())
+		###! logging
+		# jax.debug.callback(log_fn, 'batch_dhdt.mean()', batch_dhdt.mean())
+		# jax.debug.callback(log_fn, 'batch_div_flux.mean()', batch_div_flux.mean())
 		
 		return loss
-	
-	loss_log = dict(loss_batch=[], loss_phys=[], loss_reg=[])
-	def log_fn(loss_batch, loss_phys, loss_reg):
-		loss_log["loss_batch"].append(loss_batch.item())
-		loss_log["loss_phys"].append(loss_phys.item())
-		loss_log["loss_reg"].append(loss_reg.item())
 	
 	def loss_fn(params_, batch_xyt, batch_z):
 		
@@ -172,11 +174,15 @@ def get_3d_groundwater_flow_model(
 		loss_reg = lam_l2 * lp_norm(params_[0], order=2)
 		loss = loss_batch + loss_phys + loss_reg
 		
-		jax.debug.callback(log_fn, loss_batch, loss_phys, loss_reg)
+		###! logging
+		# jax.debug.callback(log_fn, 'loss_batch', loss_batch)
+		# jax.debug.callback(log_fn, 'loss_phys', loss_phys)
+		# jax.debug.callback(log_fn, 'loss_reg', loss_reg)
 		
 		return loss
 	
-	return (params, h_fn, loss_fn, loss_log) if debug_log else (params, h_fn, loss_fn) ###! for compatability
+	# return (params, h_fn, loss_fn, loss_log) if debug_log else (params, h_fn, loss_fn) ###! for backwards compatability
+	return params, h_fn, loss_fn
 
 def sample_3d_model(model, param, axis_t, axis_y, axis_x, batch_size=None):
 	"""
@@ -194,4 +200,3 @@ def sample_3d_model(model, param, axis_t, axis_y, axis_x, batch_size=None):
 	sample = sample.reshape(len(axis_t), len(axis_y), len(axis_x))
 	
 	return sample
-

@@ -35,9 +35,10 @@ G_CACHE = 'cache/cache_gs_pt.pkl'
 MODEL_LAYERS = [3, 256, 256, 1]
 
 ###! variations
-# MODEL_ACTIVATION = lambda x: jax.nn.tanh(x) + 3.9 * x * jax.nn.tanh(x) # optimal stan
-# MODEL_ACTIVATION = lambda x: jax.nn.tanh(3.57 * x) # optimal squashed tanh
-MODEL_ACTIVATION = lambda x: jax.nn.relu(6.1 * x) # optimal squashed relu
+MODEL_ACTIVATION = lambda x: jax.nn.tanh(x) + 3.9 * x * jax.nn.tanh(x) # optimal stan
+#MODEL_ACTIVATION = lambda x: jax.nn.tanh(3.57 * x) # optimal squashed tanh
+#MODEL_ACTIVATION = lambda x: jax.nn.relu(6.1 * x) # optimal squashed relu
+#MODEL_ACTIVATION = jax.nn.relu # normal relu
 
 # loss terms
 LAM_MSE = 1.0
