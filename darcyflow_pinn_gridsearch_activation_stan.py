@@ -45,10 +45,10 @@ MODEL_LAYERS = [3, 256, 256, 1]
 MODEL_ACTIVATION = lambda a,b,x: jax.nn.tanh(a*x) + b*a*x*tanh(a*x) # scaled stan
 MODEL_ACTIVATION_A_MIN = 1
 MODEL_ACTIVATION_A_MAX = 10
-MODEL_ACTIVATION_A_RES = 2
+MODEL_ACTIVATION_A_RES = 16
 MODEL_ACTIVATION_B_MIN = 0
 MODEL_ACTIVATION_B_MAX = 9
-MODEL_ACTIVATION_B_RES = 2
+MODEL_ACTIVATION_B_RES = 16
 
 # loss terms
 LAM_MSE = float(sys.argv[1]) if len(sys.argv) > 1 else 1.0
@@ -96,6 +96,7 @@ def trial_fn(a, b,
 		hidden_activation=trial_activation,
 		collocation_per_input_dim=1 ###! disabling physics constraint
 	)
+	h_fn = jax.jit(h_fn)
 	print(f"a={a}, b={b}, count_params(params)={count_params(params)}")
 	
 	# fit model
@@ -153,15 +154,10 @@ print(f"Loaded \"{S_CACHE}\"")
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 # prepare data
-# 1)
 data_points = jnp.array([(*data_wells[j], data_surface[i][0], data_surface[i][j+1]) for i in range(data_surface.shape[0]) for j in range(data_surface.shape[1]-1)])
-# 2)
 data_split = train_val_test_split(K0, data_points, BATCH_SIZE, part_train=PART_TRAIN, part_val=PART_VAL, part_test=PART_TEST)
-# 3)
 (train_x, train_y, train_steps), (val_x, val_y, val_steps), (test_x, test_y, test_steps), data_scaler = data_split
-# 4)
 data_scale_xytz = data_scaler.data_range_ / jnp.ones(len(data_scaler.data_range_), dtype='float32') # units (m, m, s, m)
-# trace
 print(f"Train: x~{train_x.shape}, y~{train_y.shape}, steps={train_steps}")
 print(f"Val: x~{val_x.shape}, y~{val_y.shape}, steps={val_steps}")
 print(f"Test: x~{test_x.shape}, y~{test_y.shape}, steps={test_steps}")
@@ -188,7 +184,8 @@ except Exception:
 	# iterate over trial axes
 	trial_count = 0
 	trial_total = len(b_axis)*len(a_axis)
-	results = [[None]*len(b_axis)]*len(a_axis)
+	# results = [[None]*len(b_axis)]*len(a_axis) ###! repeats the same list reference across all rows. So every results[i] points to the same list object
+	results = [[None for _ in range(len(b_axis))] for _ in range(len(a_axis))]
 	for i,a in enumerate(a_axis):
 		for j,b in enumerate(b_axis):
 			results[i][j] = trial_fn(a, b,
@@ -217,6 +214,7 @@ except Exception:
 
 ### plotting
 
+# adapter
 import matplotlib.pyplot as plt
 from scipy.interpolate import griddata
 import numpy as np
@@ -227,9 +225,7 @@ A, B = jnp.meshgrid(a_axis, b_axis, indexing='ij')
 # -------------------------------
 # Flatten grid and values for interpolation
 points = jnp.stack([A.flatten(), B.flatten()], axis=-1)
-values = []
-for row in results:
-	values.extend([h['test_loss'][0] for h in row])
+values = [h['test_loss'][0] for row in results for h in row]
 
 # Define finer grid for interpolation
 a_axis_fine = jnp.linspace(MODEL_ACTIVATION_A_MIN, MODEL_ACTIVATION_A_MAX, 200)
@@ -238,21 +234,21 @@ A_fine, B_fine = jnp.meshgrid(a_axis_fine, b_axis_fine, indexing='ij')
 grid_fine = jnp.stack([A_fine.flatten(), B_fine.flatten()], axis=-1)
 
 # Perform interpolation
-R_interp = griddata(points=points, values=values, xi=grid_fine, method='cubic')
+R_interp = griddata(points=points, values=values, xi=grid_fine, method='linear')
 R_interp = R_interp.reshape(200, 200)
 
 # -------------------------------
 # Plot
 # -------------------------------
 plt.figure(figsize=(8, 6))
-contour = plt.contourf(a_axis_fine, b_axis_fine, R_interp.T, levels=100, cmap='viridis')
+contour = plt.contourf(a_axis_fine, b_axis_fine, R_interp.T, levels=100, cmap='rainbow')
 plt.colorbar(contour, label='trial_fn(a, b)')
 plt.xlabel("a")
 plt.ylabel("b")
 plt.title("Interpolated Contour Plot of trial_fn(a, b)")
 plt.tight_layout()
-plt.show()
-
+#plt.show()
+plt.savefig("out.png")
 
 print("Closed plot")
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")

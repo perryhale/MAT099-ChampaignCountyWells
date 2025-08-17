@@ -13,8 +13,7 @@ from tqdm import tqdm
 
 from library.data.pipeline import batch_generator
 from library.models.nn import get_3d_groundwater_flow_model, sample_3d_model
-from library.models.util import fit
-from library.models.metrics import count_params
+from library.models.util import fit, count_params
 from library.visual import plot_surface3d, animate_hydrology
 
 
@@ -51,15 +50,15 @@ MODEL_LAYERS = [3, 256, 256, 1]
 # MODEL_ACTIVATION_B_MAX = 9
 # MODEL_ACTIVATION_B_RES = 8
 
-# MODEL_ACTIVATION = lambda b,x: jax.nn.tanh(b*x) # squashed tanh
-# MODEL_ACTIVATION_B_MIN = 1
-# MODEL_ACTIVATION_B_MAX = 10
-# MODEL_ACTIVATION_B_RES = 8
-
-MODEL_ACTIVATION = lambda b,x: jax.nn.relu(b*x) # squashed relu
+MODEL_ACTIVATION = lambda a,x: jax.nn.tanh(a*x) # squashed tanh
 MODEL_ACTIVATION_B_MIN = 1
 MODEL_ACTIVATION_B_MAX = 10
 MODEL_ACTIVATION_B_RES = 8
+
+# MODEL_ACTIVATION = lambda a,x: jax.nn.relu(a*x) # squashed relu
+# MODEL_ACTIVATION_B_MIN = 1
+# MODEL_ACTIVATION_B_MAX = 10
+# MODEL_ACTIVATION_B_RES = 8
 
 # loss terms
 LAM_MSE = float(sys.argv[1]) if len(sys.argv) > 1 else 1.0
@@ -107,7 +106,6 @@ def trial_fn(b,
 		hidden_activation=trial_activation
 	)
 	print(f"b={b}, count_params(params)={count_params(params)}")
-	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 	
 	# fit model
 	params, history = fit(
@@ -121,8 +119,7 @@ def trial_fn(b,
 		opt=OPT(OPT_ETA),
 		start_time=T0
 	)
-	print(f"LAM_SS={float(params[-1][0])}, LAM_RR={float(params[-1][1])}")
-	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
+	print(f"ss={float(params[-1][0])}, rr={float(params[-1][1])}")
 	
 	# test model
 	test_generator = batch_generator(test_x, test_y, TRAIN_BATCH)
@@ -130,7 +127,6 @@ def trial_fn(b,
 	for _ in range(test_steps):
 		test_loss += loss_fn(params, *next(test_generator)) / test_steps
 	print(f"test_loss={test_loss:.4f}")
-	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 	
 	# sample model
 	axis_x = jnp.linspace(SAMPLE_3D_XMIN, SAMPLE_3D_XMAX, k_crop.shape[1] if (SAMPLE_3D_XRES==0) else SAMPLE_3D_XRES)
@@ -139,7 +135,6 @@ def trial_fn(b,
 	h_sim = sample_3d_model(h_fn, params[0], axis_t, axis_y, axis_x, batch_size=None)
 	h_sim = data_scaler.data_min_[3] + h_sim * data_scaler.data_range_[3]
 	print(f"h_sim.shape={h_sim.shape}")
-	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 	
 	# record stats
 	history['test_loss'] = [test_loss]
@@ -166,54 +161,15 @@ data_surface = pd.read_csv(S_CACHE).to_numpy()
 print(f"Loaded \"{S_CACHE}\"")
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
-# populate data_points
-data_points = []
-for i in range(0, data_surface.shape[0], 1):
-	for j in range(0, data_surface.shape[1]-1, 1):
-		xytz = (*data_wells[j], data_surface[i][0], data_surface[i][j+1]) # xytz
-		data_points.append(xytz)
-
-data_points = jnp.array(data_points)
-
-# partition data
-n_data = data_points.shape[0]
-n_train = math.floor(PART_TRAIN * n_data)
-n_val = math.floor(PART_VAL * n_data)
-n_test = math.floor(PART_TEST * n_data)
-shuffle_idx = n_train + jax.random.permutation(K0, n_val + n_test)
-data_train = data_points[:n_train]
-data_val = data_points[shuffle_idx[:n_val]]
-data_test = data_points[shuffle_idx[n_val:n_test]]
-
-# normalise data
-data_scaler = MinMaxScaler(feature_range=(0, 1))
-data_scaler.fit(data_train)
-data_scale_xytz = data_scaler.data_range_
-data_train = data_scaler.transform(data_train)
-data_val = data_scaler.transform(data_val)
-data_test = data_scaler.transform(data_test)
-
-# supervised split
-train_x, train_y = data_train[:,:-1], data_train[:,-1] # xyt, z
-val_x, val_y = data_val[:,:-1], data_val[:,-1]
-test_x, test_y = data_test[:,:-1], data_test[:,-1]
-
-# determine batch counts
-train_steps = math.ceil(train_x.shape[0] / TRAIN_BATCH)
-val_steps = math.ceil(val_x.shape[0] / TRAIN_BATCH)
-test_steps = math.ceil(test_x.shape[0] / TRAIN_BATCH)
-
-# memory cleanup
-del shuffle_idx
-del data_points
-del data_train
-del data_val
-del data_test
-
-# trace
+# prepare data
+data_points = jnp.array([(*data_wells[j], data_surface[i][0], data_surface[i][j+1]) for i in range(data_surface.shape[0]) for j in range(data_surface.shape[1]-1)])
+data_split = train_val_test_split(K0, data_points, BATCH_SIZE, part_train=PART_TRAIN, part_val=PART_VAL, part_test=PART_TEST)
+(train_x, train_y, train_steps), (val_x, val_y, val_steps), (test_x, test_y, test_steps), data_scaler = data_split
+data_scale_xytz = data_scaler.data_range_ / jnp.ones(len(data_scaler.data_range_), dtype='float32') # units (m, m, s, m)
 print(f"Train: x~{train_x.shape}, y~{train_y.shape}, steps={train_steps}")
 print(f"Val: x~{val_x.shape}, y~{val_y.shape}, steps={val_steps}")
 print(f"Test: x~{test_x.shape}, y~{test_y.shape}, steps={test_steps}")
+print(f"Scale: [{', '.join([f'{float(scale.item()):.1f}{unit}' for scale, unit in zip(data_scale_xytz, 'mmsm')])}]")
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 # run trials
