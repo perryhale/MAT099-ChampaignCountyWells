@@ -214,27 +214,44 @@ except Exception:
 
 ### plotting
 
-from scipy.interpolate import griddata
+values = (jnp.array([[h['test_loss'][0] for h in row] for row in results]) ** 0.5 ) # m
+values = jnp.minimum(0.15, values)
+min_i, min_j = jnp.unravel_index(values.argmin(), values.shape)
 
-values = jnp.minimum(0.025, jnp.array([[h['test_loss'][0] for h in row] for row in results ]))
-min_idx = jnp.unravel_index(values.argmin(), values.shape)
+###! crop AOI
+# values = (jnp.minimum(0.025, jnp.array([[h['test_loss'][0] for h in row] for row in results])[:6,:6]) ** 0.5 ) * 100 # cm
+# a_axis = a_axis[:6]
+# b_axis = b_axis[:6]
+# min_i, min_j = jnp.unravel_index(values.argmin(), values.shape)
 
+###! linear interpolation (upscale)
+# from scipy.interpolate import griddata
+# target_res = 32
 # points = jnp.stack(jnp.meshgrid(a_axis, b_axis), axis=-1).reshape(-1,2)
-# a_axis_fine = jnp.linspace(a_axis.min(), a_axis.max(), 256)
-# b_axis_fine = jnp.linspace(b_axis.min(), b_axis.max(), 256)
+# a_axis_fine = jnp.linspace(a_axis.min(), a_axis.max(), target_res)
+# b_axis_fine = jnp.linspace(b_axis.min(), b_axis.max(), target_res)
 # grid_fine = jnp.stack(jnp.meshgrid(a_axis_fine, b_axis_fine, indexing='ij'), axis=-1).reshape(-1,2)
-
-# values = griddata(points=points, values=values.reshape(-1), xi=grid_fine, method='linear').reshape(256,256)
+# values = griddata(points=points, values=values.reshape(-1), xi=grid_fine, method='linear').reshape(target_res, target_res).T
 # a_axis = a_axis_fine
 # b_axis = b_axis_fine
+# min_i, min_j = jnp.unravel_index(values.argmin(), values.shape)
 
-plt.figure(figsize=(8, 6))
-contour = plt.contourf(a_axis, b_axis, values, levels=100, cmap='rainbow')
-#clabel = plt.clabel(contour, colors='black')
-plt.colorbar(contour)
-plt.scatter([a_axis[min_idx[0]]], [b_axis[min_idx[1]]], marker="*", s=256, c='gold')
+plt.figure(figsize=(7, 6))
+contour = plt.contourf(a_axis, b_axis, values, levels=128, cmap='rainbow')
+plt.colorbar(contour, label="Test RMSE (Metres)")
+plt.scatter([a_axis[min_i]], [b_axis[min_j]], marker="*", s=256, c='gold')
+plt.text(a_axis[min_i]-0.1, b_axis[min_j]+0.1, f"{values[min_i][min_j]:.1f}cm", fontsize=8, c='red', horizontalalignment='right', verticalalignment='bottom')
+
+###! plot second minima
+# sorted_values_idx = jnp.argsort(values, axis=None)
+# for i, second_min_flat_idx in enumerate(sorted_values_idx[:16]):
+	# second_min_i, second_min_j = jnp.unravel_index(second_min_flat_idx, values.shape)
+	# plt.scatter([a_axis[second_min_i]], [b_axis[second_min_j]], marker="x", s=16, c='red')
+	# plt.text(a_axis[second_min_i]+0.01, b_axis[second_min_j]-0.01, f"{values[second_min_i][second_min_j]:.1f}cm [{i+1}]", fontsize=8, c='red', horizontalalignment='center', verticalalignment='top')
+
 plt.xlabel("α")
 plt.ylabel("β")
+plt.gca().set_aspect('equal', 'box')
 plt.tight_layout()
 plt.show()
 #plt.savefig("out.png")
