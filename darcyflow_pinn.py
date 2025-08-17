@@ -1,3 +1,5 @@
+###! outdated
+
 import sys
 import time
 import math
@@ -13,10 +15,8 @@ from tqdm import tqdm
 
 from library.data.pipeline import batch_generator
 from library.models.nn import *
-from library.models.util import fit
-from library.models.metrics import count_params
+from library.models.util import fit, count_params
 from library.visual import plot_surface3d, animate_hydrology
-
 
 ### setup
 
@@ -181,7 +181,6 @@ params, h_fn, loss_fn, loss_log = get_3d_groundwater_flow_model(
 	lam_phys=LAM_PHYS,
 	lam_l2=LAM_L2,
 	hidden_activation=MODEL_ACTIVATION,
-	debug_log=True,
 #	model_init=init_dnn_adactivation,
 #	model_fn=dnn_adactivation
 )

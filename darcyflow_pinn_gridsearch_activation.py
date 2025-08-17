@@ -43,22 +43,10 @@ PART_TEST = 0.20
 # model
 MODEL_LAYERS = [3, 256, 256, 1]
 
-###! variations
-
-# MODEL_ACTIVATION = lambda b,x: jax.nn.tanh(x) + b * x * jax.nn.tanh(x) # stan
-# MODEL_ACTIVATION_B_MIN = 0
-# MODEL_ACTIVATION_B_MAX = 9
-# MODEL_ACTIVATION_B_RES = 8
-
-MODEL_ACTIVATION = lambda a,x: jax.nn.tanh(a*x) # squashed tanh
-MODEL_ACTIVATION_B_MIN = 1
-MODEL_ACTIVATION_B_MAX = 10
-MODEL_ACTIVATION_B_RES = 8
-
 # MODEL_ACTIVATION = lambda a,x: jax.nn.relu(a*x) # squashed relu
-# MODEL_ACTIVATION_B_MIN = 1
-# MODEL_ACTIVATION_B_MAX = 10
-# MODEL_ACTIVATION_B_RES = 8
+# MODEL_ACTIVATION_A_MIN = 1
+# MODEL_ACTIVATION_A_MAX = 10
+# MODEL_ACTIVATION_A_RES = 8
 
 # loss terms
 LAM_MSE = float(sys.argv[1]) if len(sys.argv) > 1 else 1.0
@@ -184,7 +172,7 @@ try:
 
 except Exception:
 	
-	b_axis = jnp.linspace(MODEL_ACTIVATION_B_MIN, MODEL_ACTIVATION_B_MAX, MODEL_ACTIVATION_B_RES)
+	b_axis = jnp.linspace(MODEL_ACTIVATION_A_MIN, MODEL_ACTIVATION_A_MAX, MODEL_ACTIVATION_A_RES)
 	results = [None]*len(b_axis)
 	
 	for i,b in enumerate(b_axis):
@@ -232,7 +220,7 @@ print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 # plot activation functions
 a_fn = MODEL_ACTIVATION
-b_cols = plt.cm.Dark2(jnp.linspace(0, 1, MODEL_ACTIVATION_B_RES))
+b_cols = plt.cm.Dark2(jnp.linspace(0, 1, MODEL_ACTIVATION_A_RES))
 bs = b_axis
 xs = SAMPLE_ACTIVATION
 bys = [a_fn(b, xs) for b in bs]
@@ -263,14 +251,14 @@ plt.tight_layout()
 plt.show()
 
 # plot surfaces
-fig, axis = plt.subplots(figsize=(20,3), nrows=1, ncols=MODEL_ACTIVATION_B_RES)
+fig, axis = plt.subplots(figsize=(20,3), nrows=1, ncols=MODEL_ACTIVATION_A_RES)
 for ax, b, h in zip(axis, b_axis, results):
 	ax_contour = ax.contour(h['sample']['h_sim'][50], levels=10, cmap='binary_r', extent=(0,1,0,1))
 	ax_clabel = ax.clabel(ax_contour, inline=True, fontsize=8, colors='red')
 	ax.grid()
 	ax.set_xticks([],[])
 	ax.set_yticks([],[])
-	ax.set_title(f"β={b:.1f}\ntest_loss={h['test_loss'][0]:.4f}", fontsize=11)
+	ax.set_title(f"α={b:.1f}\ntest_loss={h['test_loss'][0]:.4f}", fontsize=11)
 
 plt.tight_layout()
 plt.show()

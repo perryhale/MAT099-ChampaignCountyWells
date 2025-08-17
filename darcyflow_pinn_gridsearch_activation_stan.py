@@ -44,10 +44,10 @@ PART_TEST = 0.20
 MODEL_LAYERS = [3, 256, 256, 1]
 MODEL_ACTIVATION = lambda a,b,x: jax.nn.tanh(a*x) + b*a*x*tanh(a*x) # scaled stan
 MODEL_ACTIVATION_A_MIN = 1
-MODEL_ACTIVATION_A_MAX = 10
+MODEL_ACTIVATION_A_MAX = 5
 MODEL_ACTIVATION_A_RES = 16
 MODEL_ACTIVATION_B_MIN = 0
-MODEL_ACTIVATION_B_MAX = 9
+MODEL_ACTIVATION_B_MAX = 4
 MODEL_ACTIVATION_B_RES = 16
 
 # loss terms
@@ -113,7 +113,7 @@ def trial_fn(a, b,
 	)
 	print(f"ss={float(params[-1][0])}, rr={float(params[-1][1])}")
 	
-	# test model
+	# evaluate model
 	test_generator = batch_generator(test_x, test_y, BATCH_SIZE)
 	test_loss = 0.
 	for _ in range(test_steps):
@@ -214,41 +214,30 @@ except Exception:
 
 ### plotting
 
-# adapter
-import matplotlib.pyplot as plt
 from scipy.interpolate import griddata
-import numpy as np
-A, B = jnp.meshgrid(a_axis, b_axis, indexing='ij')
 
-# -------------------------------
-# Interpolate to Upscale (optional)
-# -------------------------------
-# Flatten grid and values for interpolation
-points = jnp.stack([A.flatten(), B.flatten()], axis=-1)
-values = [h['test_loss'][0] for row in results for h in row]
+values = jnp.minimum(0.025, jnp.array([[h['test_loss'][0] for h in row] for row in results ]))
+min_idx = jnp.unravel_index(values.argmin(), values.shape)
 
-# Define finer grid for interpolation
-a_axis_fine = jnp.linspace(MODEL_ACTIVATION_A_MIN, MODEL_ACTIVATION_A_MAX, 200)
-b_axis_fine = jnp.linspace(MODEL_ACTIVATION_B_MIN, MODEL_ACTIVATION_B_MAX, 200)
-A_fine, B_fine = jnp.meshgrid(a_axis_fine, b_axis_fine, indexing='ij')
-grid_fine = jnp.stack([A_fine.flatten(), B_fine.flatten()], axis=-1)
+# points = jnp.stack(jnp.meshgrid(a_axis, b_axis), axis=-1).reshape(-1,2)
+# a_axis_fine = jnp.linspace(a_axis.min(), a_axis.max(), 256)
+# b_axis_fine = jnp.linspace(b_axis.min(), b_axis.max(), 256)
+# grid_fine = jnp.stack(jnp.meshgrid(a_axis_fine, b_axis_fine, indexing='ij'), axis=-1).reshape(-1,2)
 
-# Perform interpolation
-R_interp = griddata(points=points, values=values, xi=grid_fine, method='linear')
-R_interp = R_interp.reshape(200, 200)
+# values = griddata(points=points, values=values.reshape(-1), xi=grid_fine, method='linear').reshape(256,256)
+# a_axis = a_axis_fine
+# b_axis = b_axis_fine
 
-# -------------------------------
-# Plot
-# -------------------------------
 plt.figure(figsize=(8, 6))
-contour = plt.contourf(a_axis_fine, b_axis_fine, R_interp.T, levels=100, cmap='rainbow')
-plt.colorbar(contour, label='trial_fn(a, b)')
-plt.xlabel("a")
-plt.ylabel("b")
-plt.title("Interpolated Contour Plot of trial_fn(a, b)")
+contour = plt.contourf(a_axis, b_axis, values, levels=100, cmap='rainbow')
+#clabel = plt.clabel(contour, colors='black')
+plt.colorbar(contour)
+plt.scatter([a_axis[min_idx[0]]], [b_axis[min_idx[1]]], marker="*", s=256, c='gold')
+plt.xlabel("α")
+plt.ylabel("β")
 plt.tight_layout()
-#plt.show()
-plt.savefig("out.png")
+plt.show()
+#plt.savefig("out.png")
 
 print("Closed plot")
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")

@@ -11,9 +11,9 @@ from matplotlib.patches import Rectangle
 from sklearn.preprocessing import MinMaxScaler
 from tqdm import tqdm
 
+from library.data.pipeline import train_val_test_split
 from library.models.nn import get_3d_groundwater_flow_model
-from library.models.metrics import *
-from library.models.util import fit
+from library.models.util import fit, count_params, loss_mse
 
 
 ### setup
@@ -65,69 +65,46 @@ PLOT_SCHEMES = False
 
 ### functions
 
-def trial_fn(data_points, part_buffer, part_train, k0, batch_size, k1, k_crop, ss, rr, lam_mse, lam_phys, lam_l2, k2, epochs, eta):
+def trial_fn(part_buffer, part_train, lam_phys, data_points, k_crop):
 	
-	# partition respecting time-series, shuffle val+test together
-	n_data = data_points.shape[0]
-	n_buffer = int(part_buffer * n_data)
-	n_train = int(part_train * n_data)
-	n_val = int(PART_VAL * n_data)
-	n_test = int(PART_TEST * n_data)
-	
-	shuffle_idx = n_buffer + n_train + jax.random.permutation(k0, n_val + n_test)
-	data_train = data_points[n_buffer:n_buffer+n_train]
-	data_val = data_points[shuffle_idx[:n_val]]
-	data_test = data_points[shuffle_idx[n_val:]]
-	
-	# unit scale
-	data_scaler = MinMaxScaler(feature_range=(0, 1))
-	data_scaler.fit(data_train)
-	data_scale_xytz = data_scaler.data_range_ / jnp.array([1., 1., 3600, 1.]) # units (m, m, hr, m)
-	
-	data_train = data_scaler.transform(data_train)
-	data_val = data_scaler.transform(data_val)
-	data_test = data_scaler.transform(data_test)
-	
-	# supervised split
-	train_x, train_y = data_train[:,:-1], data_train[:,-1] # xyt, z
-	val_x, val_y = data_val[:,:-1], data_val[:,-1]
-	test_x, test_y = data_test[:,:-1], data_test[:,-1]
-	
-	# determine batch counts
-	train_steps = math.ceil(train_x.shape[0] / batch_size)
-	val_steps = math.ceil(val_x.shape[0] / batch_size)
-	test_steps = math.ceil(test_x.shape[0] / batch_size)
-	
-	# memory cleanup
-	del shuffle_idx
-	del data_train
-	del data_val
-	del data_test
-	
-	# trace
+	# prepare data
+	data_split = train_val_test_split(K0, data_points, BATCH_SIZE, part_buffer=part_buffer, part_train=part_train, part_val=PART_VAL, part_test=PART_TEST)
+	(train_x, train_y, train_steps), (val_x, val_y, val_steps), (test_x, test_y, test_steps), data_scaler = data_split
+	data_scale_xytz = data_scaler.data_range_ / jnp.ones(len(data_scaler.data_range_), dtype='float32') # units (m, m, s, m)
 	print(f"Train: x~{train_x.shape}, y~{train_y.shape}, steps={train_steps}")
 	print(f"Val: x~{val_x.shape}, y~{val_y.shape}, steps={val_steps}")
 	print(f"Test: x~{test_x.shape}, y~{test_y.shape}, steps={test_steps}")
+	print(f"Scale: [{', '.join([f'{float(scale.item()):.1f}{unit}' for scale, unit in zip(data_scale_xytz, 'mmsm')])}]")
 	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 	
 	# initialise model+loss
 	params, h_fn, loss_fn = get_3d_groundwater_flow_model(
-		k1, MODEL_LAYERS,
-		data_scale_xytz, k_crop, ss, rr,
-		lam_mse, lam_phys, lam_l2,
+		K1,
+		MODEL_LAYERS,
+		scale_xytz=data_scale_xytz,
+		k=k_crop,
+		ss=SS,
+		rr=RR,
+		lam_mse=LAM_MSE,
+		lam_phys=lam_phys,
+		lam_l2=LAM_L2,
 		hidden_activation=MODEL_ACTIVATION
 	)
 	print(f"count_params(params)={count_params(params)}")
-	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 	
 	# fit model
 	params, history = fit(
-		k2, params, loss_fn,
-		(train_x, train_y, train_steps), (val_x, val_y, val_steps),
-		batch_size, epochs, optax.adamw(eta), T0
+		K2,
+		params,
+		loss_fn,
+		(train_x, train_y, train_steps),
+		val_data=(val_x, val_y, val_steps),
+		batch_size=BATCH_SIZE,
+		epochs=EPOCHS,
+		opt=optax.adamw(ETA),
+		start_time=T0
 	)
-	print(f"SS={float(params[-1][0])}, RR={float(params[-1][1])}")
-	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
+	print(f"ss={float(params[-1][0])}, rr={float(params[-1][1])}")
 	
 	# evaluate model
 	###!
@@ -212,13 +189,7 @@ try:
 except Exception as e:
 	
 	# populate data_points
-	data_points = []
-	for i in range(0, data_surface.shape[0], 1):
-		for j in range(0, data_surface.shape[1]-1, 1):
-			xytz = (*data_wells[j], data_surface[i][0], data_surface[i][j+1]) # xytz
-			data_points.append(xytz)
-	
-	data_points = jnp.array(data_points)
+	data_points = jnp.array([(*data_wells[j], data_surface[i][0], data_surface[i][j+1]) for i in range(data_surface.shape[0]) for j in range(data_surface.shape[1]-1)])
 	
 	# determine results and store as linked list
 	results = []
@@ -231,7 +202,7 @@ except Exception as e:
 			for part_buffer in AX_PART_BUFFER_FN(part_train):
 				
 				print(f"*** Trial: lam_phys={lam_phys:.2f}, part_train={part_train:.2f}, part_buffer={part_buffer:.2f} ***")
-				history = trial_fn(data_points, part_buffer, part_train, K0, BATCH_SIZE, K1, k_crop, SS, RR, LAM_MSE, lam_phys, LAM_L2, K2, EPOCHS, ETA)
+				history = trial_fn(part_buffer, part_train, lam_phys, data_points, k_crop)
 				history['metadata'] = dict(
 					lam_phys=lam_phys,
 					part_train=part_train,
