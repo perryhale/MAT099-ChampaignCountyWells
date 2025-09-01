@@ -43,6 +43,8 @@ PART_TEST = 0.20
 # model
 MODEL_LAYERS = [3, 256, 256, 1]
 MODEL_ACTIVATION = lambda a,x: jax.nn.relu(a*x) # scaled relu
+#MODEL_ACTIVATION = lambda a,x: jax.nn.tanh(a*x) # scaled tanh
+#MODEL_ACTIVATION = lambda a,x: jax.nn.tanh(a*x) + a*x*jax.nn.tanh(a*x) # scaled stan
 MODEL_ACTIVATION_A_MIN = 1
 MODEL_ACTIVATION_A_MAX = 10
 MODEL_ACTIVATION_A_RES = 8
