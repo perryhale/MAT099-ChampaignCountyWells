@@ -1,5 +1,3 @@
-###! outdated
-
 import sys
 import time
 import math
@@ -13,7 +11,7 @@ import matplotlib.pyplot as plt
 from sklearn.preprocessing import MinMaxScaler
 from tqdm import tqdm
 
-from library.data.pipeline import batch_generator
+from library.data.pipeline import batch_generator, train_val_test_split
 from library.models.nn import *
 from library.models.util import fit, count_params
 from library.visual import plot_surface3d, animate_hydrology
@@ -28,26 +26,23 @@ print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 I_CACHE = 'cache/data_interpolated.npz'
 S_CACHE = 'cache/data_surface.csv'
 W_CACHE = 'cache/df_rpinn.pkl'
-CACHE_ENABLED = False
+CACHE_ENABLED = True
 
 # RNG setup
 RNG_SEED = 999
 K0, K1, K2 = jax.random.split(jax.random.key(RNG_SEED), 3)
 
 # data
-TRAIN_EPOCH = 2
-TRAIN_BATCH = 64
+EPOCHS = 2
+BATCH_SIZE = 64
 PART_TRAIN = 0.75
 PART_VAL = 0.05
 PART_TEST = 0.20
 
 # model
 MODEL_LAYERS = [3, 256, 256, 1]
-
-###! variations
-#MODEL_ACTIVATION = lambda x: jax.nn.tanh(x) + 3.9 * x * jax.nn.tanh(x) # optimal stan
-MODEL_ACTIVATION = lambda x: jax.nn.tanh(3.57 * x) # optimal squashed tanh
-#MODEL_ACTIVATION = jax.nn.relu
+STAN_FN = lambda b,x: jax.nn.tanh(x) + b*x*jax.nn.tanh(x)
+MODEL_ACTIVATION = lambda x: STAN_FN(0.4, 5.0*x) # optimal stan
 
 # loss
 LAM_MSE = float(sys.argv[1]) if len(sys.argv) > 1 else 1.0
@@ -86,91 +81,19 @@ data_surface = pd.read_csv(S_CACHE).to_numpy()
 print(f"Loaded \"{S_CACHE}\"")
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
-# populate xyt->z
-data_points = []
-for i in range(0, data_surface.shape[0], 1):
-	for j in range(0, data_surface.shape[1]-1, 1):
-		xytz = (*data_wells[j], data_surface[i][0], data_surface[i][j+1]) # xytz
-		data_points.append(xytz)
-
-data_points = jnp.array(data_points)
-
-###! raw measurements
-# M_CACHE = 'cache/data_filtered_metric.csv'
-# data_filtered_metric = pd.read_csv(M_CACHE)
-# data_filtered_metric = data_filtered_metric.dropna()
-# data_points = data_filtered_metric[['X_EPSG_6350', 'Y_EPSG_6350', 'TIMESTAMP', 'HYDRAULIC_HEAD_M']].to_numpy()
-
-###! total shuffle
-# n_data = len(data_points)
-# shuffle_idx = jax.random.permutation(K0, n_data)
-# data_train = data_points[shuffle_idx[:int(PART_TRAIN * n_data)]]
-# data_val = data_points[shuffle_idx[int(PART_TRAIN * n_data) : int((PART_TRAIN + PART_VAL) * n_data)]]
-# data_test = data_points[shuffle_idx[int((PART_TRAIN + PART_VAL) * n_data) : int((PART_TRAIN + PART_VAL + PART_TEST) * n_data)]]
-
-###! partition data with train/val-test split in time order, shuffling val and test together
-n_data = data_points.shape[0]
-n_train = math.floor(PART_TRAIN * n_data)
-n_val = math.floor(PART_VAL * n_data)
-n_test = math.floor(PART_TEST * n_data)
-shuffle_idx = n_train + jax.random.permutation(K0, n_val + n_test)
-data_train = data_points[:n_train]
-data_val = data_points[shuffle_idx[:n_val]]
-data_test = data_points[shuffle_idx[n_val:n_test]]
-
-# project to unit hypercube
-data_scaler = MinMaxScaler(feature_range=(0, 1))
-data_scaler.fit(data_train)
-data_scale_xytz = data_scaler.data_range_
-
-data_train = data_scaler.transform(data_train)
-data_val = data_scaler.transform(data_val)
-data_test = data_scaler.transform(data_test)
-
-# supervised split
-train_x, train_y = data_train[:,:-1], data_train[:,-1] # xyt, z
-val_x, val_y = data_val[:,:-1], data_val[:,-1]
-test_x, test_y = data_test[:,:-1], data_test[:,-1]
-
-# determine batch counts
-train_steps = math.ceil(train_x.shape[0] / TRAIN_BATCH)
-val_steps = math.ceil(val_x.shape[0] / TRAIN_BATCH)
-test_steps = math.ceil(test_x.shape[0] / TRAIN_BATCH)
-
-# memory cleanup
-del shuffle_idx
-del data_points
-del data_train
-del data_val
-del data_test
-
-# 0 1 1
-# 0 0 1
-# 1 1 0
-# 0 0 0
-
-# train_x = jnp.array([[0,1,0],[0,0,0],[1,1,0],[0,0,0]])
-# train_y = jnp.array([[1],[1],[0],[0]])
-# train_steps = 1
-
-# val_x = jnp.array([[0,1,0],[0,0,0],[1,1,0],[0,0,0]])
-# val_y = jnp.array([[1],[1],[0],[0]])
-# val_steps = 1
-
-# test_x = jnp.array([[0,1,0],[0,0,0],[1,1,0],[0,0,0]])
-# test_y = jnp.array([[1],[1],[0],[0]])
-# test_steps = 1
-
-# data_scale_xytz = jnp.ones(4)
-
-# trace
+# prepare data
+data_points = jnp.array([(*data_wells[j], data_surface[i][0], data_surface[i][j+1]) for i in range(data_surface.shape[0]) for j in range(data_surface.shape[1]-1)])
+data_split = train_val_test_split(K0, data_points, BATCH_SIZE, part_train=PART_TRAIN, part_val=PART_VAL, part_test=PART_TEST)
+(train_x, train_y, train_steps), (val_x, val_y, val_steps), (test_x, test_y, test_steps), data_scaler = data_split
+data_scale_xytz = data_scaler.data_range_ / jnp.ones(len(data_scaler.data_range_), dtype='float32') # units (m, m, s, m)
 print(f"Train: x~{train_x.shape}, y~{train_y.shape}, steps={train_steps}")
 print(f"Val: x~{val_x.shape}, y~{val_y.shape}, steps={val_steps}")
 print(f"Test: x~{test_x.shape}, y~{test_y.shape}, steps={test_steps}")
+print(f"Scale: [{', '.join([f'{float(scale.item()):.1f}{unit}' for scale, unit in zip(data_scale_xytz, 'mmsm')])}]")
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 # initialise model+loss
-params, h_fn, loss_fn, loss_log = get_3d_groundwater_flow_model(
+params, h_fn, loss_fn = get_3d_groundwater_flow_model(
 	K1,
 	MODEL_LAYERS,
 	data_scale_xytz,
@@ -181,10 +104,9 @@ params, h_fn, loss_fn, loss_log = get_3d_groundwater_flow_model(
 	lam_phys=LAM_PHYS,
 	lam_l2=LAM_L2,
 	hidden_activation=MODEL_ACTIVATION,
-#	model_init=init_dnn_adactivation,
-#	model_fn=dnn_adactivation
+	collocation_per_input_dim=1 ###! disabling physics loss
 )
-print(f"Model: count_params(params)={count_params(params)}")
+print(f"count_params(params)={count_params(params)}")
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 # try cache
@@ -210,16 +132,16 @@ except Exception as e:
 		loss_fn,
 		(train_x, train_y, train_steps),
 		val_data=(val_x, val_y, val_steps),
-		batch_size=TRAIN_BATCH,
-		epochs=TRAIN_EPOCH,
+		batch_size=BATCH_SIZE,
+		epochs=EPOCHS,
 		opt=OPT(OPT_ETA),
 		start_time=T0
 	)
-	print(f"LAM_SS={float(params[-1][0])}, LAM_RR={float(params[-1][1])}")
+	print(f"ss={float(params[-1][0])}, rr={float(params[-1][1])}")
 	print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 	
 	# evaluate model
-	test_generator = batch_generator(test_x, test_y, TRAIN_BATCH)
+	test_generator = batch_generator(test_x, test_y, BATCH_SIZE)
 	test_loss = 0.
 	for _ in range(test_steps):
 		test_loss += loss_fn(params, *next(test_generator)) / test_steps
@@ -245,10 +167,10 @@ except Exception as e:
 		print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 # plot history
-plt.plot(range(train_steps*TRAIN_EPOCH), history['batch_loss'], label="Batch", c='purple')
-plt.plot(range(train_steps, train_steps*(TRAIN_EPOCH+1), train_steps), history['train_loss'], label="Train", c='C0')
-plt.plot(range(train_steps, train_steps*(TRAIN_EPOCH+1), train_steps), history['val_loss'], label="Val", c='red')
-plt.scatter([train_steps*TRAIN_EPOCH], history['test_loss'], label="Test", c='green', marker='x')
+plt.plot(range(train_steps*EPOCHS), history['batch_loss'], label="Batch", c='purple')
+plt.plot(range(train_steps, train_steps*(EPOCHS+1), train_steps), history['train_loss'], label="Train", c='C0')
+plt.plot(range(train_steps, train_steps*(EPOCHS+1), train_steps), history['val_loss'], label="Val", c='red')
+plt.scatter([train_steps*EPOCHS], history['test_loss'], label="Test", c='green', marker='x')
 plt.legend()
 plt.xlabel("Iteration")
 plt.ylabel("Loss")
@@ -258,15 +180,15 @@ print("Closed plot")
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 ###! DEBUG: loss components (not cached)
-for (k, v), c in zip(loss_log.items(), plt.cm.Dark2(jnp.linspace(0, 1, len(loss_log.items())))):
-	if k!='loss_batch': plt.plot(v, c=c, label=k)
-plt.legend()
-plt.xlabel("Iteration")
-plt.ylabel("Loss")
-plt.grid()
-plt.show()
-print("Closed plot")
-print(f"[Elapsed time: {time.time()-T0:.2f}s]")
+# for (k, v), c in zip(loss_log.items(), plt.cm.Dark2(jnp.linspace(0, 1, len(loss_log.items())))):
+	# if k!='loss_batch': plt.plot(v, c=c, label=k)
+# plt.legend()
+# plt.xlabel("Iteration")
+# plt.ylabel("Loss")
+# plt.grid()
+# plt.show()
+# print("Closed plot")
+# print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 # plot surface
 fig, ax = plt.subplots(figsize=(5, 5))

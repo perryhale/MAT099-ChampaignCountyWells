@@ -42,11 +42,10 @@ PART_TEST = 0.20
 
 # model
 MODEL_LAYERS = [3, 256, 256, 1]
-
-# MODEL_ACTIVATION = lambda a,x: jax.nn.relu(a*x) # squashed relu
-# MODEL_ACTIVATION_A_MIN = 1
-# MODEL_ACTIVATION_A_MAX = 10
-# MODEL_ACTIVATION_A_RES = 8
+MODEL_ACTIVATION = lambda a,x: jax.nn.relu(a*x) # scaled relu
+MODEL_ACTIVATION_A_MIN = 1
+MODEL_ACTIVATION_A_MAX = 10
+MODEL_ACTIVATION_A_RES = 8
 
 # loss terms
 LAM_MSE = float(sys.argv[1]) if len(sys.argv) > 1 else 1.0
@@ -75,12 +74,12 @@ SAMPLE_ACTIVATION = jnp.linspace(-2, 2, 512)
 
 ### functions
 
-def trial_fn(b,
+def trial_fn(a,
 		data_scale_xytz, k_crop, train_x, train_y, train_steps, val_x, val_y, val_steps, test_x, test_y, test_steps
 	):
 	
 	# init model
-	trial_activation = lambda x: MODEL_ACTIVATION(b, x)
+	trial_activation = lambda x: MODEL_ACTIVATION(a, x)
 	params, h_fn, loss_fn = get_3d_groundwater_flow_model(
 		K1,
 		MODEL_LAYERS,
@@ -93,7 +92,7 @@ def trial_fn(b,
 		lam_l2=LAM_L2,
 		hidden_activation=trial_activation
 	)
-	print(f"b={b}, count_params(params)={count_params(params)}")
+	print(f"a={a}, count_params(params)={count_params(params)}")
 	
 	# fit model
 	params, history = fit(
@@ -165,20 +164,20 @@ try:
 	with open(H_CACHE, 'rb') as f:
 		h_cache = pickle.load(f)
 		data_scaler=h_cache['data_scaler']
-		b_axis=h_cache['b_axis']
+		a_axis=h_cache['a_axis']
 		results=h_cache['results']
 		print(f"Loaded \"{H_CACHE}\"")
 		print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 except Exception:
 	
-	b_axis = jnp.linspace(MODEL_ACTIVATION_A_MIN, MODEL_ACTIVATION_A_MAX, MODEL_ACTIVATION_A_RES)
-	results = [None]*len(b_axis)
+	a_axis = jnp.linspace(MODEL_ACTIVATION_A_MIN, MODEL_ACTIVATION_A_MAX, MODEL_ACTIVATION_A_RES)
+	results = [None]*len(a_axis)
 	
-	for i,b in enumerate(b_axis):
+	for i,a in enumerate(a_axis):
 		
 		# run trial
-		history = trial_fn(b,
+		history = trial_fn(a,
 			data_scale_xytz, k_crop, train_x, train_y, train_steps, val_x, val_y, val_steps, test_x, test_y, test_steps
 		)
 		results[i] = history
@@ -188,7 +187,7 @@ except Exception:
 			with open(H_CACHE, 'wb') as f:
 				h_cache = dict(
 					data_scaler=data_scaler,
-					b_axis=b_axis,
+					a_axis=a_axis,
 					results=results
 				)
 				pickle.dump(h_cache, f)
@@ -202,16 +201,16 @@ axis_x = results[idx_best_trial]['sample']['axis_x']
 axis_y = results[idx_best_trial]['sample']['axis_y']
 axis_t = results[idx_best_trial]['sample']['axis_t']
 h_sim = results[idx_best_trial]['sample']['h_sim']
-print(f"idx_best_trial={idx_best_trial}, b_axis[idx_best_trial]={b_axis[idx_best_trial]}")
+print(f"idx_best_trial={idx_best_trial}, a_axis[idx_best_trial]={a_axis[idx_best_trial]}")
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 # plot results
 fig, ax = plt.subplots(figsize=(4,3))
-ax.plot(b_axis, axis_test_loss, c='green')
-ax.set_xlabel("β")
+ax.plot(a_axis, axis_test_loss, c='green')
+ax.set_xlabel("α")
 ax.set_ylabel("Test loss")
-ax.set_xticks(b_axis, [f"{x:.1f}" for x in b_axis])
-ax.set_xlim(b_axis.min(), b_axis.max())
+ax.set_xticks(a_axis, [f"{x:.1f}" for x in a_axis])
+ax.set_xlim(a_axis.min(), a_axis.max())
 ax.grid()
 plt.subplots_adjust(left=0.2, bottom=0.2, right=None, top=None, wspace=None, hspace=None)
 plt.show()
@@ -220,16 +219,15 @@ print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
 # plot activation functions
 a_fn = MODEL_ACTIVATION
-b_cols = plt.cm.Dark2(jnp.linspace(0, 1, MODEL_ACTIVATION_A_RES))
-bs = b_axis
+a_cols = plt.cm.Dark2(jnp.linspace(0, 1, MODEL_ACTIVATION_A_RES))
 xs = SAMPLE_ACTIVATION
-bys = [a_fn(b, xs) for b in bs]
-bgys = [jax.vmap(jax.grad(lambda x: a_fn(b, x)))(xs) for b in bs]
+ays = [a_fn(a, xs) for a in a_axis]
+agys = [jax.vmap(jax.grad(lambda x: a_fn(a, x)))(xs) for a in a_axis]
 
 fig, (ax0, ax1) = plt.subplots(nrows=1, ncols=2, figsize=(10,4))
-for b, ys, gys, c in zip(bs, bys, bgys, b_cols):
-	ax0.plot(xs, ys, c=c, label=f"β = {b:.1f}")
-	ax1.plot(xs, gys, c=c, label=f"β = {b:.1f}")
+for a, ys, gys, c in zip(a_axis, ays, agys, a_cols):
+	ax0.plot(xs, ys, c=c, label=f"α={a:.1f}")
+	ax1.plot(xs, gys, c=c, label=f"α={a:.1f}")
 
 #ax0.axhline(0, linestyle='dashed', c='black') ###! disable for relu
 #ax0.axvline(0, linestyle='dashed', c='black')
@@ -252,13 +250,13 @@ plt.show()
 
 # plot surfaces
 fig, axis = plt.subplots(figsize=(20,3), nrows=1, ncols=MODEL_ACTIVATION_A_RES)
-for ax, b, h in zip(axis, b_axis, results):
+for ax, a, h in zip(axis, a_axis, results):
 	ax_contour = ax.contour(h['sample']['h_sim'][50], levels=10, cmap='binary_r', extent=(0,1,0,1))
 	ax_clabel = ax.clabel(ax_contour, inline=True, fontsize=8, colors='red')
 	ax.grid()
 	ax.set_xticks([],[])
 	ax.set_yticks([],[])
-	ax.set_title(f"α={b:.1f}\ntest_loss={h['test_loss'][0]:.4f}", fontsize=11)
+	ax.set_title(f"α={a:.1f}\ntest_loss={h['test_loss'][0]:.4f}", fontsize=11)
 
 plt.tight_layout()
 plt.show()

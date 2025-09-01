@@ -184,8 +184,8 @@ except Exception:
 	# iterate over trial axes
 	trial_count = 0
 	trial_total = len(b_axis)*len(a_axis)
-	# results = [[None]*len(b_axis)]*len(a_axis) ###! repeats the same list reference across all rows. So every results[i] points to the same list object
-	results = [[None for _ in range(len(b_axis))] for _ in range(len(a_axis))]
+	# results = [[None]*len(b_axis)]*len(a_axis) ###! repeats the same list reference across all rows, so every column points to the last
+	results = [[None for _ in range(len(b_axis))] for _ in range(len(a_axis))] ###! jnp.array does not have dtype object, so must use linked list
 	for i,a in enumerate(a_axis):
 		for j,b in enumerate(b_axis):
 			results[i][j] = trial_fn(a, b,
@@ -214,9 +214,19 @@ except Exception:
 
 ### plotting
 
-values = (jnp.array([[h['test_loss'][0] for h in row] for row in results]) ** 0.5 ) # m
-values = jnp.minimum(0.15, values)
-min_i, min_j = jnp.unravel_index(values.argmin(), values.shape)
+
+# extract values
+values = (jnp.array([[h['test_loss'][0] for h in row] for row in results]) ** 0.5 ) * 100 # cm
+values_sorted_index = jnp.array([jnp.unravel_index(flat_index, values.shape) for flat_index in jnp.argsort(values, axis=None)])
+min_i, min_j = values_sorted_index[0] # jnp.unravel_index(values.argmin(), values.shape)
+
+surfaces = jnp.array([[h['sample']['h_sim'] for h in row] for row in results])
+axis_x = results[0][0]['sample']['axis_x']
+axis_y = results[0][0]['sample']['axis_y']
+axis_t = results[0][0]['sample']['axis_t']
+
+###! clip values
+# values = jnp.minimum(30.0, values)
 
 ###! crop AOI
 # values = (jnp.minimum(0.025, jnp.array([[h['test_loss'][0] for h in row] for row in results])[:6,:6]) ** 0.5 ) * 100 # cm
@@ -234,27 +244,84 @@ min_i, min_j = jnp.unravel_index(values.argmin(), values.shape)
 # values = griddata(points=points, values=values.reshape(-1), xi=grid_fine, method='linear').reshape(target_res, target_res).T
 # a_axis = a_axis_fine
 # b_axis = b_axis_fine
-# min_i, min_j = jnp.unravel_index(values.argmin(), values.shape)
+# values_sorted_index = jnp.array([jnp.unravel_index(flat_index, values.shape) for flat_index in jnp.argsort(values, axis=None)])
+# min_i, min_j = values_sorted_index[0] # jnp.unravel_index(values.argmin(), values.shape)
+
+
+# plot loss contour
+
+###! logarithmically sampled colour map
+from matplotlib.colors import ListedColormap
+levels = 1024
+log_rainbow = ListedColormap(plt.cm.rainbow(1 - jnp.logspace(0, -7, num=levels, base=10)))
 
 plt.figure(figsize=(7, 6))
-contour = plt.contourf(a_axis, b_axis, values, levels=128, cmap='rainbow')
-plt.colorbar(contour, label="Test RMSE (Metres)")
+contour = plt.contourf(a_axis, b_axis, values.T, levels=levels, cmap=log_rainbow)
+cbar = plt.colorbar(contour, label="Test RMSE in Centimetres", shrink=0.9, pad=0.05)
+cbar.minorticks_on()
 plt.scatter([a_axis[min_i]], [b_axis[min_j]], marker="*", s=256, c='gold')
-plt.text(a_axis[min_i]-0.1, b_axis[min_j]+0.1, f"{values[min_i][min_j]:.1f}cm", fontsize=8, c='red', horizontalalignment='right', verticalalignment='bottom')
+plt.text(a_axis[min_i]-0.1, b_axis[min_j]+0.1, f"{values[min_i][min_j]:.2f}cm", fontsize=8, c='red', horizontalalignment='right', verticalalignment='bottom')
 
-###! plot second minima
-# sorted_values_idx = jnp.argsort(values, axis=None)
-# for i, second_min_flat_idx in enumerate(sorted_values_idx[:16]):
-	# second_min_i, second_min_j = jnp.unravel_index(second_min_flat_idx, values.shape)
-	# plt.scatter([a_axis[second_min_i]], [b_axis[second_min_j]], marker="x", s=16, c='red')
-	# plt.text(a_axis[second_min_i]+0.01, b_axis[second_min_j]-0.01, f"{values[second_min_i][second_min_j]:.1f}cm [{i+1}]", fontsize=8, c='red', horizontalalignment='center', verticalalignment='top')
+###! label top values
+for i, (index_i, index_j) in enumerate(values_sorted_index[:128]):
+	plt.text(a_axis[index_i], b_axis[index_j], f"[{i+1}]\n{values[index_i][index_j]:.1f}", fontsize=6, c='red', horizontalalignment='center', verticalalignment='center')
 
 plt.xlabel("α")
 plt.ylabel("β")
 plt.gca().set_aspect('equal', 'box')
 plt.tight_layout()
 plt.show()
-#plt.savefig("out.png")
+print("Closed plot")
+print(f"[Elapsed time: {time.time()-T0:.2f}s]")
 
+
+# plot surfaces
+sub_step_i = values.shape[0]//2
+sub_step_j = values.shape[1]//2
+sub_index_t = SAMPLE_3D_TRES//2
+sub_values = values[::sub_step_i,::sub_step_j]
+sub_surfaces = surfaces[::sub_step_i,::sub_step_j]
+sub_a_axis = a_axis[::sub_step_i]
+sub_b_axis = b_axis[::sub_step_j]
+
+nrows, ncols = sub_values.shape
+fig_size = 2 * max(nrows, ncols)
+fig, axis = plt.subplots(nrows=nrows, ncols=ncols, figsize=(fig_size, fig_size))
+
+for i, row in enumerate(axis):
+	for j, ax in enumerate(row):
+		ax_contour = ax.contour(sub_surfaces[i][j][sub_index_t], levels=10, cmap='binary_r', extent=(0,1,0,1))
+		ax_clabel = ax.clabel(ax_contour, inline=True, fontsize=8, colors='red')
+		ax.grid()
+		ax.set_xticks([])
+		ax.set_yticks([])
+		ax.set_title(f"α={sub_a_axis[i]:.1f}\nβ={sub_b_axis[j]:.1f}\nRMSE={sub_values[i][j]:.2f}cm", fontsize=8)
+		ax.set_aspect('equal')
+
+plt.tight_layout()
+plt.show()
+print("Closed plot")
+print(f"[Elapsed time: {time.time()-T0:.2f}s]")
+
+# animate optimal surface
+data_scatter = (data_wells - data_scaler.data_min_[:2]) / data_scaler.data_range_[:2]
+animate_hydrology(
+	surfaces[min_i][min_j],
+	k=k_crop,
+	grid_extent=(
+		axis_x.min(),
+		axis_x.max(),
+		axis_y.min(),
+		axis_y.max()
+	),
+	cmap_contour='Blues_r',
+	axis_ticks=True,
+	origin=None,
+	isolines=10,
+	scatter_data=data_scatter.T,
+	title_fn=lambda t: f"t={axis_t[t]:.2f}",
+	clabel_fmt='%d',
+#	save_path="darcyflow_pinn_gridsearch_activation_stan_Fig2_animation.mp4"
+)
 print("Closed plot")
 print(f"[Elapsed time: {time.time()-T0:.2f}s]")
