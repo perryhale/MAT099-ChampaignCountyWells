@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 from sklearn.preprocessing import MinMaxScaler
 from tqdm import tqdm
 
-from library.data.pipeline import batch_generator
+from library.data.pipeline import batch_generator, train_val_test_split
 from library.models.nn import get_3d_groundwater_flow_model, sample_3d_model
 from library.models.util import fit, count_params
 from library.visual import plot_surface3d, animate_hydrology
@@ -34,8 +34,8 @@ RNG_SEED = 999
 K0, K1, K2 = jax.random.split(jax.random.key(RNG_SEED), 3)
 
 # data
-TRAIN_EPOCH = 2
-TRAIN_BATCH = 64
+EPOCHS = 2
+BATCH_SIZE = 64
 PART_TRAIN = 0.75
 PART_VAL = 0.05
 PART_TEST = 0.20
@@ -103,15 +103,15 @@ def trial_fn(a,
 		loss_fn,
 		(train_x, train_y, train_steps),
 		val_data=(val_x, val_y, val_steps),
-		batch_size=TRAIN_BATCH,
-		epochs=TRAIN_EPOCH,
+		batch_size=BATCH_SIZE,
+		epochs=EPOCHS,
 		opt=OPT(OPT_ETA),
 		start_time=T0
 	)
 	print(f"ss={float(params[-1][0])}, rr={float(params[-1][1])}")
 	
 	# test model
-	test_generator = batch_generator(test_x, test_y, TRAIN_BATCH)
+	test_generator = batch_generator(test_x, test_y, BATCH_SIZE)
 	test_loss = 0.
 	for _ in range(test_steps):
 		test_loss += loss_fn(params, *next(test_generator)) / test_steps
